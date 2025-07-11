@@ -29,5 +29,5 @@ def remove_incomplete_versions(logs_dir):
 
 
 if __name__ == "__main__":
-    lightning_logs_path = '../../lightning_logs'  # 替换为你的lightning_logs路径
+    lightning_logs_path = Path.cwd() / 'lightning_logs'  # 替换为你的lightning_logs路径
     remove_incomplete_versions(lightning_logs_path)

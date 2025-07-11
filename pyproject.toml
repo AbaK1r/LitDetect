@@ -143,4 +143,4 @@ documentation = "https://github.com/AbaK1r/LitDetect#readme"
 bug-tracker = "https://github.com/AbaK1r/LitDetect/issues"
 
 [project.scripts]
-litdetect-train = "scripts.train:main"
+litdetect-train = "litdetect.train:main"

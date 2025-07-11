@@ -1,5 +1,4 @@
 import logging
-import os
 import shutil
 import warnings
 from pathlib import Path
@@ -30,8 +29,7 @@ remove_incomplete_versions('lightning_logs')
 # os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
 torch.set_float32_matmul_precision('high')
 
-
-@hydra.main(config_path="conf", config_name="config", version_base=None)
+@hydra.main(config_path=str(Path.cwd()/"conf"), config_name="config", version_base=None)
 def main(cfg: DictConfig):
     logger.info(f"random seed: {cfg.run.seed}")
     pl.seed_everything(cfg.run.seed)
@@ -94,12 +92,10 @@ def copy_code(tensorboard_logger):
         TensorBoardLogger
     :return: None
     """
-    src_dirs = [Path('../src/litdetect/model'), Path('../conf'), Path('../src/litdetect/data'), Path(
-        '../src/litdetect/callbacks')]
+    src_dirs = [Path('src'), Path('conf')]
     dst_dir = Path(tensorboard_logger.log_dir) / 'code'
     dst_dir.mkdir(parents=True, exist_ok=True)
     copy_code_to_log_dir(src_dirs, dst_dir)
-    os.system(f'cp main.py {str(dst_dir / "main.py")}')
 
 def ignore_pycache(dir, files):
     """
