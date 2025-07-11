@@ -1,0 +1,5 @@
+dataset_name: 头
+num_classes: 11
+class_name: [脉络丛切面, 丘脑切面, 鼻骨横切面, 正中矢状切面, 鼻唇切面, 小脑切面, 小脑蚓部, 眼距切面, 侧脑室平面, 上下颚切面, 外耳切面]
+ano_root: /data/16t/lrh/datasets/胎儿超声/小类/训练/头/labels
+image_root: /data/16t/lrh/datasets/胎儿超声/小类/训练/头/images

@@ -1,0 +1,5 @@
+dataset_name: 腹部
+num_classes: 10
+class_name: [双肺, 双肾冠状面, 双肾横切面, 双肾纵切面, 横膈, 肛门横切面, 肠管, 脐带腹壁插入口, 腹部横切面, 膀胱]
+ano_root: /data/16t/lrh/datasets/胎儿超声/小类/训练/腹部/labels
+image_root: /data/16t/lrh/datasets/胎儿超声/小类/训练/腹部/images

@@ -1,0 +1,5 @@
+dataset_name: 心
+num_classes: 11
+class_name: [三血管气管切面, 三血管血流, 主动脉弓切面, 主动脉弓切面血流, 右房上下腔切面, 四腔心, 四腔心血流, 心室流出道, 心室流出道血流, 肺动脉分支, 肺动脉分支血流]
+ano_root: /data/16t/lrh/datasets/胎儿超声/小类/训练/心/labels
+image_root: /data/16t/lrh/datasets/胎儿超声/小类/训练/心/images

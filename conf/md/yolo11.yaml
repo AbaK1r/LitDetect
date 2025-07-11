@@ -1,0 +1,13 @@
+model_name: yolo11
+scale: x
+max_det: 100
+iou_thres: 0.45
+conf_thres: 0.15
+input_size:
+    - 1280
+    - 736
+#    - 640
+#    - 416
+train_batch_size: 14
+val_batch_size: 5
+num_workers: 16

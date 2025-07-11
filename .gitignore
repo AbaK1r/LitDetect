@@ -1,0 +1,104 @@
+# self
+outputs/
+lightning_logs/
+op/
+multirun/
+
+# PyCharm IDE configurations
+.idea/
+*.iml
+*.ipr
+*.iws
+workspace.xml
+tasks.xml
+dataSources.xml
+dataSources.local.xml
+sqlDataSources.xml
+vcs.xml
+
+# Python general exclusions
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environments
+venv/
+env/
+ENV/
+.venv/
+pythonenv*
+
+# Logs and databases
+*.log
+*.sqlite
+*.sql
+
+# Testing and coverage
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+.pytest_cache/
+nosetests.xml
+coverage.xml
+
+# Environment configurations
+.env
+.venv
+.env.local
+.env.development
+.env.test
+.env.production
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Temporary files
+*.swp
+*.swo
+*~
+~$*
+*.tmp
+*.bak
+
+# Archive formats
+*.7z
+*.dmg
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+*.ipynb
+
+# IDE configurations (cross-compatibility)
+.vscode/

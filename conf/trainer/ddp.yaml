@@ -1,0 +1,3 @@
+accelerator: gpu
+devices: 2  # 多卡训练时设置显卡数量
+strategy: ddp #_find_unused_parameters_true  # 如果多卡训练就要开

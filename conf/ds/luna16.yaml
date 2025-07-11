@@ -1,0 +1,8 @@
+dataset_name: Luna16
+num_classes: 1
+class_name: [肺结节]
+ano_root: /data/4t_hdd/DataSets/xjlDataset/Luna16results2/yolo_dataset/labels/
+image_root: /data/4t_hdd/DataSets/xjlDataset/Luna16results2/yolo_dataset/images/
+input_size:
+    - 512
+    - 512

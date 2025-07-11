@@ -1,0 +1,5 @@
+dataset_name: 四肢
+num_classes: 5
+class_name: [尺桡骨或胫腓骨, 手, 肩胛骨或髂骨, 肱骨或股骨, 足底切面]
+ano_root: /data/16t/lrh/datasets/胎儿超声/小类/训练/四肢/labels
+image_root: /data/16t/lrh/datasets/胎儿超声/小类/训练/四肢/images
