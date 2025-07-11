@@ -1268,7 +1268,7 @@ wheels = [
 [[package]]
 name = "litdetect"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "absl-py" },
     { name = "aiohappyeyeballs" },
@@ -1281,6 +1281,7 @@ dependencies = [
     { name = "attrs" },
     { name = "certifi" },
     { name = "charset-normalizer" },
+    { name = "colorama" },
     { name = "contourpy" },
     { name = "cycler" },
     { name = "faster-coco-eval" },
@@ -1388,6 +1389,7 @@ requires-dist = [
     { name = "attrs", specifier = "==25.3.0" },
     { name = "certifi", specifier = "==2025.6.15" },
     { name = "charset-normalizer", specifier = "==3.4.2" },
+    { name = "colorama", specifier = ">=0.4.6" },
     { name = "contourpy", specifier = "==1.3.2" },
     { name = "cycler", specifier = "==0.12.1" },
     { name = "faster-coco-eval", specifier = "==1.6.7" },

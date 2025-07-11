@@ -1,9 +1,31 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "litdetect"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
+license = { file = "LICENSE" }
+keywords = ["detection", "YOLO", "PyTorch", "object-detection"]
+authors = [
+  { name = "wuxiheng", email = "abakir@qq.com" }
+]
+maintainers = [
+  { name = "wuxiheng", email = "abakir@qq.com" }
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 dependencies = [
     "absl-py==2.3.0",
     "aiohappyeyeballs==2.6.1",
@@ -16,6 +38,7 @@ dependencies = [
     "attrs==25.3.0",
     "certifi==2025.6.15",
     "charset-normalizer==3.4.2",
+    "colorama>=0.4.6",
     "contourpy==1.3.2",
     "cycler==0.12.1",
     "faster-coco-eval==1.6.7",
@@ -109,3 +132,15 @@ dependencies = [
     "werkzeug==3.1.3",
     "yarl==1.20.1",
 ]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[project.urls]
+homepage = "https://github.com/AbaK1r/LitDetect"
+repository = "https://github.com/AbaK1r/LitDetect"
+documentation = "https://github.com/AbaK1r/LitDetect#readme"
+bug-tracker = "https://github.com/AbaK1r/LitDetect/issues"
+
+[project.scripts]
+litdetect-train = "scripts.train:main"

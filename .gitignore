@@ -3,6 +3,7 @@ outputs/
 lightning_logs/
 op/
 multirun/
+ultralytics/
 
 # PyCharm IDE configurations
 .idea/
