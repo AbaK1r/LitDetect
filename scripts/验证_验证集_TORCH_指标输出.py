@@ -12,9 +12,8 @@ from litdetect.callbacks import DetectionMetricsCallback, PicRecordCallback
 from litdetect.clearn_logs import remove_incomplete_versions
 from litdetect.data import DataInterface
 from litdetect.model import ModuleInterface
-from litdetect.scripts_init import get_logger, check_path
+from litdetect.scripts_init import get_logger, check_path, check_version
 
-check_path(__file__)
 # 初始化日志记录器
 logger = get_logger(__file__)
 
@@ -25,13 +24,14 @@ torch.set_float32_matmul_precision('high')
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="version number")
+    parser = argparse.ArgumentParser(description="arguments")
 
     parser.add_argument(
         "-v", "--versions",
         type=int,
         nargs='+',  # '+' 表示至少一个或多个值
-        help="An integer or a list of integers"
+        help="An integer or a list of integers",
+        default=None,
     )
 
     args = parser.parse_args()
@@ -39,10 +39,11 @@ def parse_args():
     # 将结果转换为 list[int]
     versions = args.versions
     if versions is None:
-        raise ValueError("Please provide a valid version number.")
+        check_version(None)
     if isinstance(versions, int):
         versions = [versions]
-
+    for i in range(len(versions)):
+        versions[i] = check_version(versions[i])
     # TODO: 如果不通过配置参数，则取消注释并使用下面的版本号
     # versions = [0]
     return versions
@@ -122,5 +123,6 @@ def main():
 
 
 if __name__ == '__main__':
+    check_path(__file__)
     main()
     remove_incomplete_versions('lightning_logs')

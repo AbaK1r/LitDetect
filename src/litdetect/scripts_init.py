@@ -43,3 +43,23 @@ def check_path(file_path: str):
             f"当前工作目录: {cwd}\n"
             f"使用命令: cd {cwd} && python scripts/your_script.py{Style.RESET_ALL}"
         )
+
+def check_version(version):
+    versions = sorted([int(i.stem.split('_')[-1]) for i in Path('lightning_logs').glob('version_*')])
+    if version is None:
+        raise RuntimeError(
+            f"{Fore.RED}请指定版本号！\n"
+            f"使用命令: python scripts/your_script.py -v {versions[-1]}\n"
+            f"可选版本：{', '.join(str(i) for i in versions)}{Style.RESET_ALL}"
+        )
+    assert isinstance(version, int), f"{Fore.RED}版本号必须为整数！{Style.RESET_ALL}"
+    if version < 0:
+        assert -version <= len(versions), f"{Fore.RED}版本 {version} 超出范围！\n" \
+                                          f"请检查版本号是否正确，已有版本有：{', '.join(str(i) for i in versions)}{Style.RESET_ALL}"
+        version = versions[version]
+    elif version not in versions:
+        raise RuntimeError(
+            f"{Fore.RED}版本 {version} 不存在！\n"
+            f"请检查版本号是否正确，可选版本：{', '.join(str(i) for i in versions)}{Style.RESET_ALL}"
+        )
+    return version

@@ -1,5 +1,4 @@
 import argparse
-import logging
 from pathlib import Path
 
 import onnx
@@ -8,15 +7,14 @@ import torch
 from omegaconf import OmegaConf
 
 from litdetect.model import ModuleInterface
-from litdetect.scripts_init import get_logger, check_path
+from litdetect.scripts_init import get_logger, check_path, check_version
 
-check_path(__file__)
 # 初始化日志记录器
 logger = get_logger(__file__)
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="convert Faster R-CNN to ONNX")
+    parser = argparse.ArgumentParser(description="convert moduel to ONNX")
 
     parser.add_argument(
         "-v", "--version",
@@ -34,7 +32,7 @@ def parse_args():
     args = parser.parse_args()
 
     # 将结果转换为 int
-    version = args.version
+    version = check_version(args.version)
     if version is None:
         raise ValueError("Please provide a valid version number.")
 
@@ -103,5 +101,7 @@ def main():
     model = ModuleInterface.load_from_checkpoint(checkpoint_path=ckpt, **args).eval().cuda()
     export_onnx(ckpt, model, input_shape=(batchsize, 3, *args.input_size[::-1]), dynamic=dynamic)
 
+
 if __name__ == '__main__':
+    check_path(__file__)
     main()

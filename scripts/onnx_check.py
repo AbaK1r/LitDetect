@@ -18,9 +18,6 @@
 # onnx.save(model, "repaired_model.onnx")
 # print("Model saved as repaired_model.onnx")
 
-import onnxruntime
-import numpy as np
-
 # # ONNX model
 # onnx_model = onnxruntime.InferenceSession('simplified_model.onnx')
 # ipt = np.random.rand(3, 512, 512).astype(np.float32)

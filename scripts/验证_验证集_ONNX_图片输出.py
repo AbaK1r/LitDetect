@@ -1,10 +1,10 @@
+import argparse
 import colorsys
 import copy
-import random
-from typing import List, Union, Dict, Tuple, Optional
 import logging
+import random
 from pathlib import Path
-from tqdm import tqdm
+from typing import List, Union, Dict, Tuple, Optional
 
 import numpy as np
 import onnxruntime
@@ -13,6 +13,7 @@ import torchvision
 from PIL import Image, ImageDraw, ImageFont
 from omegaconf import OmegaConf
 from torchmetrics.detection import MeanAveragePrecision
+from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
@@ -23,6 +24,40 @@ logging.basicConfig(
         logging.StreamHandler()  # 输出到控制台
     ]
 )
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="arguments")
+
+    parser.add_argument("-v", "--versions", type=int, help="An integer or a list of integers", default=None)
+    parser.add_argument("-i", "--ckpt_dir", type=str, help="checkpoint path")
+    parser.add_argument("-o", "--output_path", type=str, help="output path", default='')
+    parser.add_argument("-c", "--concat", help="dataset path", action='store_true')
+
+    args = vars(parser.parse_args())
+    args['output_path'] = None if args['output_path'] == '' else args['output_path']
+
+    from litdetect.scripts_init import check_version
+    args['versions'] = check_version(args['versions'])
+
+    # TODO: 如果不通过配置参数，则取消注释并使用下面的arg
+    # args = {
+    #     'versions': 0,
+    #     'ckpt_dir': '/data/16t/wxh/LitDetect/lightning_logs/version_86/ckpts/yolo11-epoch=130-map_50=0.79230_bs_1.onnx'
+    # }
+    return args
+
+
+def main():
+    parser_args = parse_args()
+    hparams_path = Path(f'lightning_logs/version_{parser_args['versions']}/hparams.yaml')
+    if parser_args['output_path'] is None:
+        output_pred_path = output_label_path = None
+    else:
+        output_pred_path = Path(parser_args['output_path']) / 'predictions'
+        output_label_path = Path(parser_args['output_path']) / 'labels'
+    val(hparams_path, parser_args['ckpt_dir'], output_pred_path, output_label_path)
+    if parser_args['concat']:
+        concat_pred_gt_images(output_pred_path, output_label_path, Path(parser_args['output_path']) / 'concat_images')
 
 
 class FasterRCNN_OnnxInferer:
@@ -170,13 +205,13 @@ class Yolo11_OnnxInferer:
         return output
 
 
-def val(output_pred_path: Path = None, output_label_path: Path = None):
+def val(args_path, onnx_path, output_pred_path: Path = None, output_label_path: Path = None):
     if output_pred_path is not None:
         output_pred_path.mkdir(parents=True, exist_ok=True)
     if output_label_path is not None:
         output_label_path.mkdir(parents=True, exist_ok=True)
 
-    args = OmegaConf.load('lightning_logs/version_86/hparams.yaml')
+    args = OmegaConf.load(args_path)
 
     ano_root = args.ano_root
     image_root = args.image_root
@@ -204,8 +239,7 @@ def val(output_pred_path: Path = None, output_label_path: Path = None):
         extended_summary=False,  # 启用详细数据（包含精确率/召回率）
         backend="pycocotools"  # 使用pycocotools后端
     )
-    inferer = (FasterRCNN_OnnxInferer if args.model_name == 'faster_rcnn' else Yolo11_OnnxInferer)(
-        '/data/16t/wxh/LitDetect/lightning_logs/version_86/ckpts/yolo11-epoch=130-map_50=0.79230_bs_1.onnx')
+    inferer = (FasterRCNN_OnnxInferer if args.model_name == 'faster_rcnn' else Yolo11_OnnxInferer)(onnx_path)
 
     for meta in tqdm(item_list):
         raw_image = Image.open(meta['image_path']).convert('RGB')
@@ -563,6 +597,4 @@ def concat_pred_gt_images(output_pred_path: Path, output_label_path: Path, final
 
 
 if __name__ == '__main__':
-    # val(output_pred_path=Path('./op/predictions/'), output_label_path=Path('./op/labels/'))
-    # concat_pred_gt_images(output_pred_path=Path('./op/predictions/'), output_label_path=Path('./op/labels/'), final_path=Path('./op/concat_images/'))
-    val()
+    main()

@@ -11,9 +11,8 @@ from tqdm import tqdm
 
 from litdetect.data.scale_tookits import letterbox, recover_original_coords
 from litdetect.model import ModuleInterface
-from litdetect.scripts_init import get_logger, check_path
+from litdetect.scripts_init import get_logger, check_path, check_version
 
-check_path(__file__)
 # 初始化日志记录器
 logger = get_logger(__file__)
 
@@ -23,15 +22,15 @@ torch.set_float32_matmul_precision('high')
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="version number")
+    parser = argparse.ArgumentParser(description="arguments")
 
     parser.add_argument("-v", "--versions", type=int, help="An integer or a list of integers")
-    parser.add_argument("-i", "--input_dir", type=str, help="Input directory")
-    parser.add_argument("-o", "--output_dir", type=str, help="Output directory", default='')
-    parser.add_argument("--suffix", type=str, help="Image suffix", default='png')
+    parser.add_argument("-i", "--input_dir", type=str, help="Input directory")  # 图片所在的路径
+    parser.add_argument("-o", "--output_dir", type=str, help="Output directory", default='')  # 输出目录
+    parser.add_argument("--suffix", type=str, help="Image suffix", default='png')  # 图片后缀
 
     args = vars(parser.parse_args())
-
+    args['versions'] = check_version(args['versions'])
     # TODO: 如果不通过配置参数，则取消注释并使用下面的arg
     # args = {
     #     'versions': 0,
@@ -145,4 +144,5 @@ def save_json(image_path, preds, orig_shape, output_dir):
 
 # 程序入口
 if __name__ == '__main__':
+    check_path(__file__)
     main()
