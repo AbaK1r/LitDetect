@@ -205,16 +205,16 @@ def plot_images(
 if __name__ == "__main__":
     # 模拟数据：1张图片，3通道，640x640
     images = (np.ones((8, 3, 320, 640)) * 0.5).astype(np.float32)
-    # batch_idx = np.array([0, 3])
-    # cls = np.array([0, 1])
-    # bboxes = np.array([[200, 200, 300, 600], [100, 200, 300, 600]])  # 归一化坐标
-    # confs = np.array([0.9, 0.8])
-    batch_idx = np.array([])
-    cls = np.array([])
-    bboxes = np.array([])  # 归一化坐标
-    confs = np.array([])
+    batch_idx = np.array([0, 3])
+    cls = np.array([0, 1])
+    bboxes = np.array([[200, 200, 300, 600], [100, 200, 300, 600]])  # 归一化坐标
+    confs = np.array([0.9, 0.8])
+    # batch_idx = np.array([])
+    # cls = np.array([])
+    # bboxes = np.array([])  # 归一化坐标
+    # confs = np.array([])
 
-    names = {0: "李小肉李小肉李小肉李小肉李小肉", 1: "李大肉李大肉李大肉李大肉李大肉"}
+    names = {0: "小肉小肉小肉小肉小肉", 1: "大肉大肉大肉大肉大肉"}
 
     plot_images(
         images=images,

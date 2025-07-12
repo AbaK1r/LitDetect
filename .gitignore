@@ -99,7 +99,7 @@ Desktop.ini
 
 # Jupyter Notebook
 .ipynb_checkpoints/
-*.ipynb
+#*.ipynb
 
 # IDE configurations (cross-compatibility)
 .vscode/
