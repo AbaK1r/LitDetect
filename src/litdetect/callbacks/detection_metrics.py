@@ -221,6 +221,13 @@ class DetectionMetricsCallback(pl.Callback):
 
         # 计算mAP指标（包含扩展摘要）
         map_res = self.map_metric.compute()
+        # import pickle
+        # with open(f'torch.pkl', 'wb') as f:
+        #     data = (self.map_metric.detection_labels,
+        #             self.map_metric.detection_box,
+        #             self.map_metric.detection_scores,
+        #             self.map_metric.groundtruth_box)
+        #     pickle.dump(data, f)
         for k, v in map_res.items():
             if isinstance(v, torch.Tensor) and len(v.shape) == 0:
                 map_res[k] = v[None]

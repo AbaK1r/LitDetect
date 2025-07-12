@@ -57,7 +57,7 @@ def export_onnx(ckpt_path, torch_model, input_shape, dynamic=False):
 
     dummy_input = torch.randn(input_shape).to('cuda')
     output = torch_model(dummy_input)
-    print(f"Model output shape: {output.shape}")
+    logger.info(f"Model output shape: {output.shape}")
 
     dynamic_axes = {
         'input': {0: 'batch_size'},   # 动态 batch size 输入
@@ -92,7 +92,8 @@ def main():
     ckpts = ddir.rglob('*.ckpt')
     ckpts = [(float(i.stem.split('=')[-1]), i) for i in ckpts if i.stem != 'last']
     ckpts.sort(key=lambda x: x[0])
-
+    if len(ckpts) == 0:
+        raise ValueError(f'No ckpt found in {ddir}')
     # 根据回调模式选择最佳检查点
     ckpt = ckpts[-1][1] if args.call_back_mode == 'max' else ckpts[0][1]
     logger.info(f'Load ckpt: {ckpt}')

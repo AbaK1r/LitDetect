@@ -11,7 +11,7 @@ from torchvision.models.detection.rpn import concat_box_prediction_layers
 
 
 class FasterRcnn(nn.Module):
-    def __init__(self, num_classes=5, backbone_name='resnet34', iou_thres=0.45, conf_thres=0.25, input_size=(512, 512), pretrained=False):
+    def __init__(self, num_classes=5, backbone_name='resnet34', iou_thres=0.45, conf_thres=0.05, input_size=(512, 512), pretrained=False):
         super().__init__()
         self.iou_thres = iou_thres
         self.conf_thres = conf_thres
@@ -81,10 +81,10 @@ class FasterRcnn(nn.Module):
         boxes = box_ops.clip_boxes_to_image(pred_boxes, images.image_sizes[0])[:, 1:]
 
         boxes_resize_ratios = [s / s_orig for s, s_orig in zip(original_image_size, images.image_sizes[0])]
-        # boxes[..., (0, 2)] = boxes[..., (0, 2)] * boxes_resize_ratios[1]
+
         boxes[..., 0] = boxes[..., 0] * boxes_resize_ratios[1]
         boxes[..., 2] = boxes[..., 2] * boxes_resize_ratios[1]
-        # boxes[..., (1, 3)] = boxes[..., (1, 3)] * boxes_resize_ratios[0]
+
         boxes[..., 1] = boxes[..., 1] * boxes_resize_ratios[0]
         boxes[..., 3] = boxes[..., 3] * boxes_resize_ratios[0]
 
@@ -133,7 +133,7 @@ class FasterRcnn(nn.Module):
             c = x[:, 5:6] * self.max_wh  # classes
             scores = x[:, 4]  # scores
             boxes = x[:, :4] + c  # boxes (offset by class)
-            nms_idx = torchvision.ops.nms(boxes, scores, 0.45)  # NMS
+            nms_idx = torchvision.ops.nms(boxes, scores, self.iou_thres)  # NMS
             results[xi] = x[nms_idx]
         return results
 

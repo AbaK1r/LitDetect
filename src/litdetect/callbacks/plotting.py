@@ -6,6 +6,8 @@ from typing import Union, Optional, Dict
 import numpy as np
 import torch
 from PIL import Image, ImageDraw, ImageFont
+from litdetect.scripts_init import get_logger
+logger = get_logger(__name__)
 
 
 def plot_images(
@@ -102,7 +104,7 @@ def plot_images(
         font_size = max(10, int(20 * min(scale_x, scale_y)))
         font = ImageFont.truetype(font_path, font_size)
     except Exception as e:
-        print(f"[Warning] Failed to load font {font_path}: {e}, using default font.")
+        logger.warning(f"[Warning] Failed to load font {font_path}: {e}, using default font.")
         font = ImageFont.load_default()
 
     # 为每个类别生成固定颜色

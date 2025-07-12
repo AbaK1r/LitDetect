@@ -290,6 +290,13 @@ def val(args_path, onnx_path, output_pred_path: Path = None, output_label_path: 
 
     map_res = map_metric.compute()
     logger.info(map_res)
+    # import pickle
+    # with open(f'onnx.pkl', 'wb')as f:
+    #     data = (map_metric.detection_labels,
+    #             map_metric.detection_box,
+    #             map_metric.detection_scores,
+    #             map_metric.groundtruth_box)
+    #     pickle.dump(data, f)
 
 
 def plot_images(

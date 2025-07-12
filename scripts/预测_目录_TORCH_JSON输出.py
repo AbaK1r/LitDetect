@@ -60,6 +60,8 @@ def main():
     ckpts = ddir.rglob('*.ckpt')
     ckpts = [(float(i.stem.split('=')[-1]), i) for i in ckpts if i.stem != 'last']
     ckpts.sort(key=lambda x: x[0])
+    if len(ckpts) == 0:
+        raise ValueError(f'No ckpt found in {ddir}')
     ckpt = ckpts[-1][1] if args.call_back_mode == 'max' else ckpts[0][1]
     logger.info(f'Load ckpt: {ckpt}')
     model = ModuleInterface.load_from_checkpoint(checkpoint_path=ckpt, **args).model.eval().cuda()

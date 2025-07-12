@@ -146,3 +146,12 @@ input_size:
 
 详见 [Hydra](https://hydra.cc/docs/intro/)
 
+### 验证模型
+
+```scripts/```中的脚本在项目根目录下运行：
+```bash
+python scripts/验证_验证集_TORCH_指标输出.py -v 79
+```
+这里```-v```指定验证集的编号，如```-v 79```，表示```lightning_logs/version_79```.
+
+指标会输出到最新的```lightning_logs/version_n```中
