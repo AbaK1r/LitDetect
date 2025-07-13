@@ -34,8 +34,6 @@ git clone https://github.com/AbaK1r/LitDetect.git
 cd LitDetect
 
 # 安装项目依赖
-pip install -r requirements.txt
-
 pip install -e .
 
 ```
