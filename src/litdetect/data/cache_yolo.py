@@ -212,6 +212,7 @@ class CacheYolo(Dataset):
                     if_g = True
                 if if_g:
                     logger.info(f"Creating HDF5 file: {self.image_cache_path}")
+                    # TODO: 多线程
                     with h5py.File(self.image_cache_path, 'w') as hf:
                         total = len(self.item_list)
                         img_dset = hf.create_dataset(

@@ -34,16 +34,11 @@ git clone https://github.com/AbaK1r/LitDetect.git
 cd LitDetect
 
 # 安装项目依赖
-pip install -e .
-```
-
-或者使用 requirements.txt：
-
-```bash
-conda create -n litdetect python=3.12
-conda activate litdetect
 pip install -r requirements.txt
-``` 
+
+pip install -e .
+
+```
 </details>
 
 #### 验证安装
@@ -144,8 +139,25 @@ input_size:
 ```
 就会覆盖md@run中的input_size。
 
-详见 [Hydra](https://hydra.cc/docs/intro/)
+```trainer```有三个默认选项：
+- si: 单机单卡训练
+- ddp: 单机多卡训练
+- dev: 测试模式，单机单卡测试
 
+```run```下关于```dataset```选项：
+```yaml
+run:
+    dataset: cache_yolo
+    cache_mode: disk
+```
+cache_mode: 缓存模式
+- ```disk```为磁盘缓存会生成h5文件，在训练时读取；
+- ```ram```为内存缓存，会在训练前就把h5文件全载到内存中，训练时直接从内存中读取;
+- ```disable```为不缓存，训练时从原始数据中读取。
+
+关于配置文件构造和重载，详见 [Hydra](https://hydra.cc/docs/intro/)
+
+---
 ### 验证模型
 
 ```scripts/```中的脚本在项目根目录下运行：
@@ -155,3 +167,18 @@ python scripts/验证_验证集_TORCH_指标输出.py -v 79
 这里```-v```指定验证集的编号，如```-v 79```，表示```lightning_logs/version_79```.
 
 指标会输出到最新的```lightning_logs/version_n```中
+
+### 进阶
+
+在后台静默训练：
+```bash
+nohup litdetect-train trainer.enable_progress_bar=false > train.log 2>&1 &
+```
+
+查看训练进度：
+```bash
+tail train.log -f
+ ```
+您还可以使用 TensorBoard 查看训练进度：
+```bash
+tensorboard --logdir lightning_logs
