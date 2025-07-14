@@ -214,7 +214,7 @@ class CacheYolo(Dataset):
                 chunks=(1, *self.input_size[::-1], 3)
             )
 
-            cache_labels = []
+            cache_labels = [None] * total  # 初始化固定长度列表
 
             # 创建任务队列和结果队列
             task_queue = queue.Queue()
@@ -277,10 +277,9 @@ class CacheYolo(Dataset):
 
             # 主线程：单线程写入HDF5
             pbar = tqdm(total=total, desc='Generating cache', unit='img')
-            written_count = 0
+            processed_count = 0
 
-            while written_count < total:
-                # 获取下一批处理结果
+            while processed_count < total:
                 try:
                     start_idx, images_batch, labels_batch = result_queue.get(timeout=30)
                 except queue.Empty:
@@ -289,17 +288,19 @@ class CacheYolo(Dataset):
 
                 actual_batch_size = images_batch.shape[0]
 
-                # 写入HDF5
+                # 写入HDF5（图片位置始终正确）
                 img_dset[start_idx:start_idx + actual_batch_size] = images_batch
-                cache_labels.extend(labels_batch)
 
-                # 释放内存
+                # 修复2：将标签按原始索引写入预分配列表
+                for i, label in enumerate(labels_batch):
+                    cache_labels[start_idx + i] = label  # 关键：按索引存储标签
+
                 del images_batch, labels_batch
                 result_queue.task_done()
 
                 # 更新进度
                 pbar.update(actual_batch_size)
-                written_count += actual_batch_size
+                processed_count += actual_batch_size
 
             # 清理工作
             pbar.close()
@@ -307,17 +308,17 @@ class CacheYolo(Dataset):
             # 等待所有任务完成
             task_queue.join()
 
-            # 检查是否有剩余结果
+            # 检查剩余结果
             while not result_queue.empty():
                 start_idx, images_batch, labels_batch = result_queue.get()
                 actual_batch_size = images_batch.shape[0]
                 img_dset[start_idx:start_idx + actual_batch_size] = images_batch
-                cache_labels.extend(labels_batch)
+                for i, label in enumerate(labels_batch):
+                    cache_labels[start_idx + i] = label  # 同样按索引存储
                 result_queue.task_done()
 
-            logger.info(f"Disk cache generation complete. Total items processed: {written_count}")
-
-            return cache_labels
+            logger.info(f"Disk cache generation complete. Total items processed: {processed_count}")
+            return cache_labels  # 返回按索引排序的标签列表
 
     def _generate_cache(self):
         """生成缓存数据（DDP环境下仅rank0执行磁盘缓存操作）"""
@@ -340,32 +341,32 @@ class CacheYolo(Dataset):
                     if_g = True
                 if if_g:
                     logger.info(f"Creating HDF5 file: {self.image_cache_path}")
-                    # cache_labels = self._generate_disk_cache_with_multithreading()
-                    with h5py.File(self.image_cache_path, 'w') as hf:
-                        total = len(self.item_list)
-                        img_dset = hf.create_dataset(
-                            'images', shape=(total, *self.input_size[::-1], 3),
-                            chunks=(1, *self.input_size[::-1], 3))
-                        cache_labels = []
-                        batch_size = 32
-
-                        pbar = tqdm(total=total, desc='Generating cache', unit='img')
-                        for idx in range(0, total, batch_size):
-                            images_batch = []
-                            labels_batch = []
-                            for i in range(batch_size):
-                                if idx + i >= total:
-                                    break
-                                item = self.item_list[idx + i]
-                                image, label_data = self._process_item(item)
-                                images_batch.append(image)
-                                labels_batch.append(label_data)
-                                pbar.update(1)
-
-                            images_batch = np.array(images_batch)
-                            img_dset[idx:idx + len(images_batch)] = images_batch
-                            cache_labels.extend(labels_batch)
-                        pbar.close()
+                    cache_labels = self._generate_disk_cache_with_multithreading()
+                    # with h5py.File(self.image_cache_path, 'w') as hf:
+                    #     total = len(self.item_list)
+                    #     img_dset = hf.create_dataset(
+                    #         'images', shape=(total, *self.input_size[::-1], 3),
+                    #         chunks=(1, *self.input_size[::-1], 3))
+                    #     cache_labels = []
+                    #     batch_size = 32
+                    #
+                    #     pbar = tqdm(total=total, desc='Generating cache', unit='img')
+                    #     for idx in range(0, total, batch_size):
+                    #         images_batch = []
+                    #         labels_batch = []
+                    #         for i in range(batch_size):
+                    #             if idx + i >= total:
+                    #                 break
+                    #             item = self.item_list[idx + i]
+                    #             image, label_data = self._process_item(item)
+                    #             images_batch.append(image)
+                    #             labels_batch.append(label_data)
+                    #             pbar.update(1)
+                    #
+                    #         images_batch = np.array(images_batch)
+                    #         img_dset[idx:idx + len(images_batch)] = images_batch
+                    #         cache_labels.extend(labels_batch)
+                    #     pbar.close()
 
                     # 保存标签数据
                     cache_data = {'labels': cache_labels, 'cache_hash': self.cache_hash}
