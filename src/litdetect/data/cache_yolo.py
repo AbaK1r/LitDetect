@@ -340,32 +340,32 @@ class CacheYolo(Dataset):
                     if_g = True
                 if if_g:
                     logger.info(f"Creating HDF5 file: {self.image_cache_path}")
-                    cache_labels = self._generate_disk_cache_with_multithreading()
-                    # with h5py.File(self.image_cache_path, 'w') as hf:
-                    #     total = len(self.item_list)
-                    #     img_dset = hf.create_dataset(
-                    #         'images', shape=(total, *self.input_size[::-1], 3),
-                    #         chunks=(1, *self.input_size[::-1], 3))
-                    #     cache_labels = []
-                    #     batch_size = 32
-                    #
-                    #     pbar = tqdm(total=total, desc='Generating cache', unit='img')
-                    #     for idx in range(0, total, batch_size):
-                    #         images_batch = []
-                    #         labels_batch = []
-                    #         for i in range(batch_size):
-                    #             if idx + i >= total:
-                    #                 break
-                    #             item = self.item_list[idx + i]
-                    #             image, label_data = self._process_item(item)
-                    #             images_batch.append(image)
-                    #             labels_batch.append(label_data)
-                    #             pbar.update(1)
-                    #
-                    #         images_batch = np.array(images_batch)
-                    #         img_dset[idx:idx + len(images_batch)] = images_batch
-                    #         cache_labels.extend(labels_batch)
-                    #     pbar.close()
+                    # cache_labels = self._generate_disk_cache_with_multithreading()
+                    with h5py.File(self.image_cache_path, 'w') as hf:
+                        total = len(self.item_list)
+                        img_dset = hf.create_dataset(
+                            'images', shape=(total, *self.input_size[::-1], 3),
+                            chunks=(1, *self.input_size[::-1], 3))
+                        cache_labels = []
+                        batch_size = 32
+
+                        pbar = tqdm(total=total, desc='Generating cache', unit='img')
+                        for idx in range(0, total, batch_size):
+                            images_batch = []
+                            labels_batch = []
+                            for i in range(batch_size):
+                                if idx + i >= total:
+                                    break
+                                item = self.item_list[idx + i]
+                                image, label_data = self._process_item(item)
+                                images_batch.append(image)
+                                labels_batch.append(label_data)
+                                pbar.update(1)
+
+                            images_batch = np.array(images_batch)
+                            img_dset[idx:idx + len(images_batch)] = images_batch
+                            cache_labels.extend(labels_batch)
+                        pbar.close()
 
                     # 保存标签数据
                     cache_data = {'labels': cache_labels, 'cache_hash': self.cache_hash}
