@@ -1,14 +1,13 @@
+import logging
 import warnings
 from pathlib import Path
-import logging
-from typing import List, Dict, Any
+from typing import List, Dict
 
 import numpy as np
-import pytorch_lightning as pl
-from openpyxl import load_workbook
-import torch
 import pandas as pd
-from pytorch_lightning.utilities.types import STEP_OUTPUT
+import pytorch_lightning as pl
+import torch
+from openpyxl import load_workbook
 from tabulate import tabulate
 from torch import distributed as dist
 from torchmetrics.detection import MeanAveragePrecision

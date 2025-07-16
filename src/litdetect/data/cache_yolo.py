@@ -331,6 +331,7 @@ class CacheYolo(Dataset):
 
             # === DDP同步点：所有进程在此等待 ===
             if dist.is_initialized():
+                raise NotImplementedError('DDP not supported yet. Please use litdetect-cache to generate cache')
                 dist.barrier()
 
             # 仅rank0执行缓存创建
@@ -342,31 +343,7 @@ class CacheYolo(Dataset):
                 if if_g:
                     logger.info(f"Creating HDF5 file: {self.image_cache_path}")
                     cache_labels = self._generate_disk_cache_with_multithreading()
-                    # with h5py.File(self.image_cache_path, 'w') as hf:
-                    #     total = len(self.item_list)
-                    #     img_dset = hf.create_dataset(
-                    #         'images', shape=(total, *self.input_size[::-1], 3),
-                    #         chunks=(1, *self.input_size[::-1], 3))
-                    #     cache_labels = []
-                    #     batch_size = 32
-                    #
-                    #     pbar = tqdm(total=total, desc='Generating cache', unit='img')
-                    #     for idx in range(0, total, batch_size):
-                    #         images_batch = []
-                    #         labels_batch = []
-                    #         for i in range(batch_size):
-                    #             if idx + i >= total:
-                    #                 break
-                    #             item = self.item_list[idx + i]
-                    #             image, label_data = self._process_item(item)
-                    #             images_batch.append(image)
-                    #             labels_batch.append(label_data)
-                    #             pbar.update(1)
-                    #
-                    #         images_batch = np.array(images_batch)
-                    #         img_dset[idx:idx + len(images_batch)] = images_batch
-                    #         cache_labels.extend(labels_batch)
-                    #     pbar.close()
+                    # cache_labels = self._generate_disk_cache()
 
                     # 保存标签数据
                     cache_data = {'labels': cache_labels, 'cache_hash': self.cache_hash}
@@ -392,6 +369,34 @@ class CacheYolo(Dataset):
             dist.barrier()
 
         logger.info(f"Cache generation completed in {time.time() - start_time:.2f} seconds")
+
+    def _generate_disk_cache(self):
+        with h5py.File(self.image_cache_path, 'w') as hf:
+            total = len(self.item_list)
+            img_dset = hf.create_dataset(
+                'images', shape=(total, *self.input_size[::-1], 3),
+                chunks=(1, *self.input_size[::-1], 3))
+            cache_labels = []
+            batch_size = 32
+
+            pbar = tqdm(total=total, desc='Generating cache', unit='img')
+            for idx in range(0, total, batch_size):
+                images_batch = []
+                labels_batch = []
+                for i in range(batch_size):
+                    if idx + i >= total:
+                        break
+                    item = self.item_list[idx + i]
+                    image, label_data = self._process_item(item)
+                    images_batch.append(image)
+                    labels_batch.append(label_data)
+                    pbar.update(1)
+
+                images_batch = np.array(images_batch)
+                img_dset[idx:idx + len(images_batch)] = images_batch
+                cache_labels.extend(labels_batch)
+            pbar.close()
+        return cache_labels
 
     def _process_item(self, item):
         """处理单个数据项并返回图像和标签数据"""

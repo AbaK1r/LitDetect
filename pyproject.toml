@@ -147,3 +147,4 @@ bug-tracker = "https://github.com/AbaK1r/LitDetect/issues"
 
 [project.scripts]
 litdetect-train = "litdetect.train:main"
+litdetect-cache = "litdetect.cache:main"
