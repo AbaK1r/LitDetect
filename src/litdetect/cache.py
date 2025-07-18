@@ -8,8 +8,9 @@ from litdetect.data import DataInterface
 def main(cfg: DictConfig):
 
     args = cfg.run
+    args.dataset = 'cache_yolo'
     args.cache_mode = 'disk'
-    dl = DataInterface(**args)
+    dl = DataInterface(**args, force_cache=True)
     dl.setup('fit')
 
 

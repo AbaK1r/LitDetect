@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 class CacheYolo(Dataset):
     def __init__(self, num_classes, class_name, ano_root, image_root, input_size=(672, 389), data_mode='train',
-                 cache_mode='disable', cache_dir=None):
+                 cache_mode='disable', cache_dir=None, force_cache=False):
         super().__init__()
         self.h5_file = None  # 用于DISK缓存的HDF5文件句柄
         self.num_classes = num_classes
@@ -37,6 +37,7 @@ class CacheYolo(Dataset):
         self.input_size = input_size
         self.data_mode = data_mode
         self.cache_mode = cache_mode
+        self.force_cache = force_cache
         self.cache_dir = cache_dir
         self.train = data_mode == 'train'
         self.cache_hash = None
@@ -337,7 +338,10 @@ class CacheYolo(Dataset):
             # 仅rank0执行缓存创建
             if rank == 0:
                 if self.label_cache_path_exists:
-                    if_g = True if input('源文件已修改，是否生成缓存？[y/n]') == 'y' else False
+                    if self.force_cache:
+                        if_g = True
+                    else:
+                        if_g = True if input('源文件已修改，是否重新生成缓存？[y/n]') == 'y' else False
                 else:
                     if_g = True
                 if if_g:

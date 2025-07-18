@@ -1,6 +1,6 @@
 import argparse
 import json
-import logging
+import os
 from pathlib import Path
 
 import pytorch_lightning as pl
@@ -62,14 +62,6 @@ def args_print(cfg: DictConfig):
 
 # 主函数，用于模型验证
 def main():
-    logging.basicConfig(
-        level=logging.INFO,
-        format='[%(asctime)s,%(msecs)03d][%(name)s][%(levelname)s] - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S',
-        handlers=[
-            logging.StreamHandler()  # 输出到控制台
-        ]
-    )
     _versions = parse_args()
     tensorboard_logger = TensorBoardLogger('')
     save_xlsx_dir = Path(tensorboard_logger.log_dir) / 'result.xlsx'
@@ -121,6 +113,10 @@ def main():
         # 执行模型验证
         trainer.test(model, datamodule=dl)
         torch.cuda.empty_cache()
+
+        tensorboard_events = list(Path(tensorboard_logger.log_dir).glob('events*'))
+        for tensorboard_event in tensorboard_events:
+            os.system(f'rm {tensorboard_event}')
         tensorboard_logger = None
 
 

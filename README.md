@@ -104,6 +104,17 @@ image_root: /path/to/images
 
 ---
 
+### 生成缓存文件
+```bash
+# 基础生成
+litdetect-cache
+
+# 指定参数生成
+litdetect-cache ds@run=your_dataset
+```
+
+---
+
 ### 训练启动
 
 使用 `litdetect-train` 命令启动训练：
@@ -180,3 +191,9 @@ tail train.log -f
 您还可以使用 TensorBoard 查看训练进度：
 ```bash
 tensorboard --logdir lightning_logs
+```
+
+multirun 训练多个模型：
+```bash
+litdetect-train -m md@run=yolo11,frcnn trainer=ddp ds@run=ds1,ds2,ds3
+```
