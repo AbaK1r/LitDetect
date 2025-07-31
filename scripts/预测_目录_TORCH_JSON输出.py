@@ -64,7 +64,8 @@ def main():
         raise ValueError(f'No ckpt found in {ddir}')
     ckpt = ckpts[-1][1] if args.call_back_mode == 'max' else ckpts[0][1]
     logger.info(f'Load ckpt: {ckpt}')
-    model = ModuleInterface.load_from_checkpoint(checkpoint_path=ckpt, **args).model.eval().cuda()
+    model = ModuleInterface.load_from_checkpoint(
+        checkpoint_path=ckpt, map_location='cpu', strict=True, **args).model.eval().cuda()
 
     # 推理过程
     with torch.no_grad():

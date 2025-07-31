@@ -85,7 +85,8 @@ def main():
         logger.info(f'Load ckpt: {ckpt}')
 
         # 加载模型和数据集
-        model = ModuleInterface.load_from_checkpoint(checkpoint_path=ckpt, **args)
+        model = ModuleInterface.load_from_checkpoint(
+            checkpoint_path=ckpt, map_location='cpu', strict=True, **args)
         dl = DataInterface(**args)
 
         # 初始化回调列表
