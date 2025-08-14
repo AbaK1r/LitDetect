@@ -55,16 +55,34 @@ class ModuleInterface(pl.LightningModule):
             weight_decay = self.hparams.weight_decay
         else:
             weight_decay = 1e-4
-        param_dicts = [
-            {"params": [p for n, p in self.named_parameters() if p.requires_grad]},
-            # {"params": [p for n, p in self.named_parameters() if "backbone" not in n and p.requires_grad]},
-            # {
-            #     "params": [p for n, p in self.named_parameters() if "backbone" in n and p.requires_grad],
-            #     "lr": self.hparams.lr_backbone,
-            # },
-        ]
-        optimizer = torch.optim.AdamW(
-            param_dicts, lr=self.hparams.lr, weight_decay=weight_decay)
+        if self.hparams.optimizer == 'adam':
+            param_dicts = [
+                {"params": [p for n, p in self.named_parameters() if p.requires_grad]},
+                # {"params": [p for n, p in self.named_parameters() if "backbone" not in n and p.requires_grad]},
+                # {
+                #     "params": [p for n, p in self.named_parameters() if "backbone" in n and p.requires_grad],
+                #     "lr": self.hparams.lr_backbone,
+                # },
+            ]
+            optimizer = torch.optim.AdamW(
+                param_dicts, lr=self.hparams.lr, weight_decay=weight_decay)
+        elif self.hparams.optimizer == "muon":
+            from torch import distributed as dist
+            param_groups = [
+                dict(params=self.model.hidden_weights, use_muon=True,
+                     lr=self.hparams.muon_lr, weight_decay=self.hparams.muon_weight_decay),
+                dict(params=self.model.hidden_gains_biases + self.model.nonhidden_params, use_muon=False,
+                     lr=self.hparams.lr, betas=(0.9, 0.95), weight_decay=weight_decay),
+            ]
+            if dist.is_available() and dist.is_initialized():
+                from muon import MuonWithAuxAdam
+                optimizer = MuonWithAuxAdam(param_groups)
+            else:
+                from muon import SingleDeviceMuonWithAuxAdam
+                optimizer = SingleDeviceMuonWithAuxAdam(param_groups)
+        else:
+            raise ValueError('Invalid optimizer')
+
         if self.hparams.lr_scheduler is None:
             return optimizer
         else:

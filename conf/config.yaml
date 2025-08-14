@@ -2,7 +2,7 @@ defaults:
     - _self_
     - trainer: si
     - md@run: frcnn
-    - ds@run: luna16
+    - ds@run: jz
 
 run:
     seed: 172
@@ -18,6 +18,10 @@ run:
     lr_step_size: 2
     lr_gamma: 0.99
     early_stop: true
+
+    optimizer: muon
+    muon_lr: 1e-3
+    muon_weight_decay: 3e-3
 
 trainer:
     num_sanity_val_steps: -1

@@ -175,7 +175,7 @@ class CacheYolo(Dataset):
             self.cache_hash = self._get_meta_data_hash()
 
             # 缓存文件路径带哈希
-            self.image_cache_path = self.cache_dir / f"{self.data_mode}_images.h5"
+            self.image_cache_path = self.cache_dir / f"{self.data_mode}_images_{self.input_size[0]}x{self.input_size[1]}.h5"
             self.label_cache_path = self.cache_dir / f"{self.data_mode}_labels.pkl"
 
             if self._is_cache_valid():

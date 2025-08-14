@@ -134,10 +134,14 @@ dependencies = [
     "wcwidth>=0.2.13",
     "werkzeug>=3.1.3",
     "yarl>=1.20.1",
+    "muon-optimizer",
 ]
 
 [tool.setuptools]
 package-dir = {"" = "src"}
+
+[tool.uv.sources]
+muon-optimizer = { git = "https://github.com/KellerJordan/Muon" }
 
 [project.urls]
 homepage = "https://github.com/AbaK1r/LitDetect"

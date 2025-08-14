@@ -23,6 +23,18 @@ class FasterRcnn(nn.Module):
                                            aspect_ratios=((0.5, 1.0, 2.0),))
         self.model = FasterRCNN(backbone, num_classes=num_classes+1, rpn_anchor_generator=anchor_generator, min_size=self.min_wh)
 
+        # === 参数分组 ===
+        # 获取 backbone 模块
+        backbone_params = set(self.model.backbone.parameters())
+
+        # 分离 backbone 参数 和 非 backbone 参数
+        backbone_named_params = dict(self.model.backbone.named_parameters())
+
+        # 保存为模型属性，便于后续使用
+        self.hidden_weights = [p for n, p in backbone_named_params.items() if p.ndim >= 2 and p.requires_grad]
+        self.hidden_gains_biases = [p for n, p in backbone_named_params.items() if p.ndim < 2 and p.requires_grad]
+        self.nonhidden_params = [p for p in self.model.parameters() if p not in backbone_params]
+
     def _sim_rpn(self, images, features):
         features = list(features.values())
         objectness, pred_bbox_deltas = self.model.rpn.head(features)
