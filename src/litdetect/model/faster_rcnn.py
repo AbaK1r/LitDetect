@@ -11,14 +11,33 @@ from torchvision.models.detection.rpn import concat_box_prediction_layers
 
 
 class FasterRcnn(nn.Module):
-    def __init__(self, num_classes=5, backbone_name='resnet34', iou_thres=0.45, conf_thres=0.05, input_size=(512, 512), pretrained=False):
+    def __init__(
+            self,
+            num_classes=5,
+            backbone_type='torchvision',
+            backbone_name='resnet34',
+            iou_thres=0.45,
+            conf_thres=0.05,
+            input_size=(512, 512),
+            pretrained=False,
+            REPO_DIR=None,
+            weights_path=None
+    ):
         super().__init__()
         self.iou_thres = iou_thres
         self.conf_thres = conf_thres
         self.input_size = input_size
         self.max_wh = max(*input_size)
         self.min_wh = min(*input_size)
-        backbone = BackBone(model_name=backbone_name, pretrained=pretrained)
+        if backbone_type == 'torchvision':
+            backbone = BackBone(model_name=backbone_name, pretrained=pretrained)
+        elif backbone_type == 'dinov3':
+            assert backbone_name in ['convnext_tiny', 'convnext_small', 'convnext_base', 'convnext_large']
+            assert REPO_DIR is not None
+            assert weights_path is not None
+            backbone = DINOv3ConvNeXt(model_name=backbone_name, REPO_DIR=REPO_DIR, weights_path=weights_path)
+        else:
+            raise ValueError('backbone_type error')
         anchor_generator = AnchorGenerator(sizes=((128, 256, 512),),
                                            aspect_ratios=((0.5, 1.0, 2.0),))
         self.model = FasterRCNN(backbone, num_classes=num_classes+1, rpn_anchor_generator=anchor_generator, min_size=self.min_wh)
@@ -158,3 +177,26 @@ class BackBone(nn.Module):
 
     def forward(self, x):
         return self.model(x)[0]
+
+
+class DINOv3ConvNeXt(nn.Module):
+    def __init__(self, weights_path, REPO_DIR, model_name='convnext_small'):
+        super().__init__()
+        self.model = torch.hub.load(REPO_DIR, f'dinov3_{model_name}', source='local', weights=weights_path)
+        self.out_channels = self.model.embed_dim
+
+    def forward(self, x):
+        for i in range(4):
+            x = self.model.downsample_layers[i](x)
+            x = self.model.stages[i](x)
+
+        return x
+
+if __name__ == '__main__':
+    model = BackBone('convnext_small')
+    # print(model)
+    print(model(torch.randn(1, 3, 640, 640)).shape)
+
+    model = DINOv3ConvNeXt(weights_path='/data/16t/wxh/ds/ckpts/dinov3_convnext_small_pretrain_lvd1689m-296db49d.pth', REPO_DIR='/data/16t/wxh/dinov3')
+    # print(model)
+    print(model(torch.randn(1, 3, 640, 640)).shape)

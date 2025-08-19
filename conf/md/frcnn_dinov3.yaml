@@ -1,0 +1,14 @@
+model_name: faster_rcnn
+backbone_name: convnext_small
+backbone_type: dinov3
+weights_path: /data/16t/wxh/ds/ckpts/dinov3_convnext_small_pretrain_lvd1689m-296db49d.pth
+REPO_DIR: /data/16t/wxh/dinov3
+pretrained: true
+iou_thres: 0.45
+conf_thres: 0.05
+input_size:
+    - 640
+    - 416
+train_batch_size: 14
+val_batch_size: 5
+num_workers: 16

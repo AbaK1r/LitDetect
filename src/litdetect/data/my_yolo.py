@@ -5,7 +5,6 @@ import albumentations as A
 import numpy as np
 import torch
 from PIL import Image
-from albumentations.pytorch.transforms import ToTensorV2
 from torch.utils.data import Dataset
 
 from .scale_tookits import xywh2xyxy, letterbox, apply_scale_to_coords
@@ -22,15 +21,30 @@ class MyYolo(Dataset):
         self.input_size = input_size
 
         if self.train:
-            self.transforms= A.Compose([
+            self.transforms = A.Compose([
+                A.Affine(
+                    scale=(0.7, 1.3),  # Zoom in/out by 80-120%
+                    rotate=(-15, 15),  # Rotate by -15 to +15 degrees
+                    balanced_scale=True,
+                    # translate_percent=(0, 0.1), # Optional: translate by 0-10%
+                    # shear=(-10, 10),          # Optional: shear by -10 to +10 degrees
+                    p=0.3
+                ),
+                # A.CoarseDropout(num_holes_range=(1, 8), hole_height_range=(0.1, 0.25),
+                #                hole_width_range=(0.1, 0.25), p=0.2),
                 A.HorizontalFlip(p=0.5),
-                A.RandomBrightnessContrast(p=0.2),
+                A.VerticalFlip(p=0.5),
+                # A.RandomBrightnessContrast(p=0.2),
                 A.GaussianBlur(p=0.2),
-                ToTensorV2(),
-            ], bbox_params=A.BboxParams(format='pascal_voc', label_fields=['labels']))
+                A.Sequential([
+                    A.SmallestMaxSize(max_size=int(max(self.input_size) * 1.25), p=1.0),
+                    A.RandomCrop(height=self.input_size[1], width=self.input_size[0], p=1.0)
+                ], p=0.1),
+                A.ToTensorV2(),
+            ], bbox_params=A.BboxParams(format='pascal_voc', label_fields=['labels'], min_visibility=0.5))
         else:
-            self.transforms = self.transforms= A.Compose([
-                ToTensorV2(),
+            self.transforms = A.Compose([
+                A.ToTensorV2(),
             ], bbox_params=A.BboxParams(format='pascal_voc', label_fields=['labels']))
 
         self.item_list = []

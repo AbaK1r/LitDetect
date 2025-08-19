@@ -197,3 +197,13 @@ multirun 训练多个模型：
 ```bash
 litdetect-train -m md@run=yolo11,frcnn trainer=ddp ds@run=ds1,ds2,ds3
 ```
+
+如果要用frcnn_dinov3，得去[DINOv3](https://github.com/facebookresearch/dinov3)下载权重
+
+目前只支持 convnext
+
+然后修改conf/md/frcnn_dinov3.yaml配置：
+```yaml
+REPO_DIR: # 填写DINOv3的目录
+DINO_WEIGHTS: # 填写DINOv3的权重文件
+```

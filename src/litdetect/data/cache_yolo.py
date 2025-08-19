@@ -79,10 +79,12 @@ class CacheYolo(Dataset):
                     A.RandomCrop(height=self.input_size[1], width=self.input_size[0], p=1.0)
                 ], p=0.1),
                 A.ToTensorV2(),
+                A.Normalize(mean=(0.430, 0.411, 0.296), std=(0.213, 0.156, 0.143)),
             ], bbox_params=A.BboxParams(format='pascal_voc', label_fields=['labels'], min_visibility=0.5))
         else:
             self.transforms = A.Compose([
                 A.ToTensorV2(),
+                A.Normalize(mean=(0.430, 0.411, 0.296), std=(0.213, 0.156, 0.143)),
             ], bbox_params=A.BboxParams(format='pascal_voc', label_fields=['labels']))
 
         # 构建数据项列表
@@ -333,7 +335,7 @@ class CacheYolo(Dataset):
             # === DDP同步点：所有进程在此等待 ===
             if dist.is_initialized():
                 raise NotImplementedError('DDP not supported yet. Please use litdetect-cache to generate cache')
-                dist.barrier()
+                # dist.barrier()
 
             # 仅rank0执行缓存创建
             if rank == 0:

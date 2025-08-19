@@ -1,0 +1,5 @@
+dataset_name: 脊柱
+num_classes: 3
+class_name: [纵切面, 横切面, 冠状面]
+ano_root: /data/16t/lrh/quzao/Neighbor2Neighbor-main/指标测试/脊柱/labels
+image_root: /data/16t/lrh/quzao/Neighbor2Neighbor-main/指标测试/脊柱/images
