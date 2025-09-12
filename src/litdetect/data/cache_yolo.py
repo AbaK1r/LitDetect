@@ -78,13 +78,13 @@ class CacheYolo(Dataset):
                     A.SmallestMaxSize(max_size=int(max(self.input_size)*1.25), p=1.0),
                     A.RandomCrop(height=self.input_size[1], width=self.input_size[0], p=1.0)
                 ], p=0.1),
-                A.ToTensorV2(),
                 A.Normalize(mean=(0.430, 0.411, 0.296), std=(0.213, 0.156, 0.143)),
+                A.ToTensorV2(),
             ], bbox_params=A.BboxParams(format='pascal_voc', label_fields=['labels'], min_visibility=0.5))
         else:
             self.transforms = A.Compose([
-                A.ToTensorV2(),
                 A.Normalize(mean=(0.430, 0.411, 0.296), std=(0.213, 0.156, 0.143)),
+                A.ToTensorV2(),
             ], bbox_params=A.BboxParams(format='pascal_voc', label_fields=['labels']))
 
         # 构建数据项列表
