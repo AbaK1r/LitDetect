@@ -177,6 +177,20 @@ python scripts/验证_验证集_TORCH_指标输出.py -v 79
 
 指标会输出到最新的```lightning_logs/version_n```中
 
+#### 使用 simple_trt_infer
+将 simple_trt_infer.so 复制到 scripts/ 目录，然后
+```bash
+python scripts/验证_验证集_TRT_图片输出.py -v 79 -i xxx.engine
+```
+使用加密的 bs 文件
+```bash
+python scripts/验证_验证集_TRT_图片输出.py -v 79 -i xxx.bs -e
+```
+#### 使用 onnxruntime
+```bash
+python scripts/验证_验证集_ONNX_图片输出.py -v 79 -i xxx.onnx
+```
+其他参数自己去看文件里的 parser
 ### 进阶
 
 在后台静默训练：

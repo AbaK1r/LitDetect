@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import List, Union, Dict, Tuple, Optional
 
 import numpy as np
-import onnxruntime
+import simple_trt_infer
 import torch
 import torchvision
 from PIL import Image, ImageDraw, ImageFont
@@ -32,6 +32,7 @@ def parse_args():
     parser.add_argument("-i", "--ckpt_dir", type=str, help="权重路径，必填")
     parser.add_argument("-o", "--output_path", type=str, help="保存预测结果的路径，可不填", default='')
     parser.add_argument("-c", "--concat", help="拼接并保存GT和预测的图", action='store_true')
+    parser.add_argument("-e", "--encrypt", help="使用加密后的权重", action='store_true')
 
     args = vars(parser.parse_args())
     args['output_path'] = None if args['output_path'] == '' else args['output_path']
@@ -55,25 +56,20 @@ def main():
     else:
         output_pred_path = Path(parser_args['output_path']) / 'predictions'
         output_label_path = Path(parser_args['output_path']) / 'labels'
-    val(hparams_path, parser_args['ckpt_dir'], output_pred_path, output_label_path)
+    val(hparams_path, parser_args['ckpt_dir'], output_pred_path, output_label_path, parser_args['encrypt'])
     if parser_args['concat']:
         concat_pred_gt_images(output_pred_path, output_label_path, Path(parser_args['output_path']) / 'concat_images')
 
 
-class FasterRCNN_OnnxInferer:
-    def __init__(self, model_path):
-        providers = ['CPUExecutionProvider']
-        if torch.cuda.is_available():
-            providers.insert(0, 'CUDAExecutionProvider')
-            # providers.insert(0, 'TensorrtExecutionProvider')
-        self.model = onnxruntime.InferenceSession(model_path, providers=providers)
-        self.input_name = self.model.get_inputs()[0].name
-        self.output_name = self.model.get_outputs()[0].name
-        self.input_shape = self.model.get_inputs()[0].shape
-        self.output_shape = self.model.get_outputs()[0].shape
+class FasterRCNN_TRTInferer:
+    def __init__(self, model_path, encrypt):
+        self.model = simple_trt_infer.simple_model(model_path, False, encrypt)
+        self.input_shape = self.model.get_input_shape()
+        self.output_shape = self.model.get_output_shape()
 
     def inference(self, ipt, conf_threshold=0.05, nms_threshold=0.45) -> List[Dict[str, np.ndarray]]:
-        output = self.model.run(None, {self.input_name: ipt})[0].astype(np.float32)
+        ipt = np.ascontiguousarray(ipt)
+        output = self.model.infer(ipt).astype(np.float32)
         output = self.postprocess(output, conf_threshold, nms_threshold)
         return output
 
@@ -114,19 +110,15 @@ class FasterRCNN_OnnxInferer:
         return outputs
 
 
-class Yolo11_OnnxInferer:
-    def __init__(self, model_path):
-        providers = ['CPUExecutionProvider']
-        if torch.cuda.is_available():
-            providers.insert(0, 'CUDAExecutionProvider')
-        self.model = onnxruntime.InferenceSession(model_path, providers=providers)
-        self.input_name = self.model.get_inputs()[0].name
-        self.output_name = self.model.get_outputs()[0].name
-        self.input_shape = self.model.get_inputs()[0].shape
-        self.output_shape = self.model.get_outputs()[0].shape
+class Yolo11_TRTInferer:
+    def __init__(self, model_path, encrypt):
+        self.model = simple_trt_infer.simple_model(model_path, False, encrypt)
+        self.input_shape = self.model.get_input_shape()
+        self.output_shape = self.model.get_output_shape()
 
     def inference(self, ipt, *args, **kwargs) -> List[Dict[str, np.ndarray]]:
-        output = self.model.run(None, {self.input_name: ipt})[0].astype(np.float32)
+        ipt = np.ascontiguousarray(ipt)
+        output = self.model.infer(ipt).astype(np.float32)
         output = self.postprocess(output, *args, **kwargs)
         return output
 
@@ -205,7 +197,7 @@ class Yolo11_OnnxInferer:
         return output
 
 
-def val(args_path, onnx_path, output_pred_path: Path = None, output_label_path: Path = None):
+def val(args_path, onnx_path, output_pred_path: Path = None, output_label_path: Path = None, encrypt=False):
     if output_pred_path is not None:
         output_pred_path.mkdir(parents=True, exist_ok=True)
     if output_label_path is not None:
@@ -239,7 +231,7 @@ def val(args_path, onnx_path, output_pred_path: Path = None, output_label_path: 
         extended_summary=False,  # 启用详细数据（包含精确率/召回率）
         backend="pycocotools"  # 使用pycocotools后端
     )
-    inferer = (FasterRCNN_OnnxInferer if args.model_name == 'faster_rcnn' else Yolo11_OnnxInferer)(onnx_path)
+    inferer = (FasterRCNN_TRTInferer if args.model_name == 'faster_rcnn' else Yolo11_TRTInferer)(onnx_path, encrypt)
 
     for meta in tqdm(item_list):
         raw_image = Image.open(meta['image_path']).convert('RGB')
