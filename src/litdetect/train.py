@@ -32,7 +32,7 @@ torch.set_float32_matmul_precision('high')
 @hydra.main(config_path=str(Path.cwd()/"conf"), config_name="config", version_base=None)
 def main(cfg: DictConfig):
     logger.info(f"random seed: {cfg.run.seed}")
-    pl.seed_everything(cfg.run.seed)
+    pl.seed_everything(cfg.run.seed, workers=True)
     tensorboard_logger = TensorBoardLogger('')
     copy_code(tensorboard_logger)
 
