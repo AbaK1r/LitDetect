@@ -28,6 +28,7 @@ def parse_args():
     parser.add_argument("-i", "--input_dir", type=str, help="Input directory")  # 图片所在的路径
     parser.add_argument("-o", "--output_dir", type=str, help="Output directory", default='')  # 输出目录
     parser.add_argument("--suffix", type=str, help="Image suffix", default='png')  # 图片后缀
+    parser.add_argument("--threh", type=float, help="box conf threh", default=0.4)
 
     args = vars(parser.parse_args())
     args['versions'] = check_version(args['versions'])
@@ -46,6 +47,7 @@ def main():
 
     data_dir = Path(parser_args['input_dir'])
     image_suffix = parser_args['suffix']
+    threh = parser_args['threh']
     ddir = Path(f'lightning_logs/version_{parser_args['versions']}/ckpts/')
     args = OmegaConf.load(ddir.parent / 'hparams.yaml')
     args.val_batch_size = 1
@@ -78,8 +80,8 @@ def main():
                 preds = [{
                     "box": recover_original_coords(i[:4], scale_params, 'xyxy'),
                     "score": i[4], "class": args.class_name[int(i[5])],
-                } for i in preds]
-                save_json(pic_path, preds, scale_params['orig_size'], output_dir)
+                } for i in preds if i[4] >= threh]
+                save_json(pic_path, preds, scale_params['orig_size'], data_dir, output_dir)
                 # break
 
 # 预处理函数，将图像转换为模型输入格式
@@ -98,12 +100,13 @@ def preprocess(pic_path, input_size):
     return image, scale_params
 
 # 保存结果为JSON格式
-def save_json(image_path, preds, orig_shape, output_dir):
+def save_json(image_path, preds, orig_shape, input_dir, output_dir):
     """
     保存预测结果为JSON文件
     :param image_path: 图像路径
     :param preds: 预测结果
     :param orig_shape: 原始图像尺寸
+    :param input_dir: 输入目录
     :param output_dir: 输出目录
     """
     json_data = {
@@ -140,7 +143,8 @@ def save_json(image_path, preds, orig_shape, output_dir):
         }
         json_data["shapes"].append(shape_info)
 
-    json_save_path = output_dir / (image_path.stem + '.json')
+    json_save_path = output_dir / image_path.relative_to(input_dir).with_suffix(".json")
+    json_save_path.parent.mkdir(parents=True, exist_ok=True)
     with open(json_save_path, 'w', encoding='utf-8') as f:
         # noinspection PyTypeChecker
         json.dump(json_data, f, indent=4, ensure_ascii=False)

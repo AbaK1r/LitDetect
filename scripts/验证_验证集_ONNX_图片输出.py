@@ -29,7 +29,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="arguments")
 
     parser.add_argument("-v", "--versions", type=int, help="lightning_log中的version数字", default=None)
-    parser.add_argument("-i", "--ckpt_dir", type=str, help="权重路径，必填")
+    parser.add_argument("-d", "--ckpt_dir", type=str, help="权重路径，必填")
     parser.add_argument("-o", "--output_path", type=str, help="保存预测结果的路径，可不填", default='')
     parser.add_argument("-c", "--concat", help="拼接并保存GT和预测的图", action='store_true')
 
