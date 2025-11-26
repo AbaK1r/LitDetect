@@ -490,7 +490,7 @@ class CacheYolo(Dataset):
 
         # 准备目标字典
         bboxes_tensor = sample['bboxes']
-        image_tensor = sample['image'].float() / 255.
+        image_tensor = sample['image'].float()
 
         target = {
             "boxes": torch.tensor(bboxes_tensor).float(),
