@@ -1,7 +1,7 @@
-from pathlib import Path
 import logging
-from colorama import Fore, Style
+from pathlib import Path
 
+from colorama import Fore, Style
 
 # 初始化日志器
 logger = logging.getLogger(__name__)
@@ -41,7 +41,7 @@ def check_path(file_path: str):
         raise RuntimeError(
             f"{Fore.RED}请在项目根目录下运行此脚本。\n"
             f"当前工作目录: {cwd}\n"
-            f"使用命令: cd {cwd} && python scripts/your_script.py{Style.RESET_ALL}"
+            f"使用命令: cd {Path(__file__).resolve().parent} && python scripts/your_script.py{Style.RESET_ALL}"
         )
 
 def check_version(version):
