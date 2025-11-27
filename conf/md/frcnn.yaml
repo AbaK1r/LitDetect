@@ -3,7 +3,7 @@ backbone_name: convnext_small
 pretrained: true
 iou_thres: 0.45
 conf_thres: 0.05
-input_size:
+input_size_hw:
     - 1280
     - 736
 #    - 640

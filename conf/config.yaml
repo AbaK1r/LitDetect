@@ -10,7 +10,7 @@ run:
     call_back_mode: max
     csdp: ~
     sdp: ~
-    dataset: cache_yolo
+    dataset: yolo
     cache_mode: disable
     weight_decay: 1e-4
     lr: 3e-4

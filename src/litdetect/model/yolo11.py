@@ -44,7 +44,7 @@ class Yolo11(nn.Module):
                  [[16, 19, 22], 1, 'Detect', ['nc']]],
     }
 
-    def __init__(self, num_classes, class_name=None, scale='m', iou_thres=0.45, conf_thres=0.25, input_size=(672, 389), max_det=300):
+    def __init__(self, num_classes, class_name=None, scale='m', iou_thres=0.45, conf_thres=0.25, input_size_hw=(672, 389), max_det=300):
         super().__init__()
         assert num_classes == len(class_name), f"num_classes ({num_classes}) must equal to len(class_name) ({len(class_name)})"
         assert len(scale) == 1 and scale in "nsmlx", f"scale must be one of 'nsmlx', but got {scale}"
@@ -54,14 +54,14 @@ class Yolo11(nn.Module):
         self.yaml['names'] = class_name
         self.yaml['scale'] = scale
 
-        self.w, self.h = input_size
+        self.h, self.w = input_size_hw
         self.iou_thres = iou_thres
         self.conf_thres = conf_thres
         self.max_det = max_det
 
         self.model = DetectionModel(self.yaml, verbose=False)
         self.model.args = DEFAULT_CFG
-        self.model.args.imgsz = input_size[::-1]
+        self.model.args.imgsz = input_size_hw
 
     def forward(self, images):
         """

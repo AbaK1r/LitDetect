@@ -6,7 +6,7 @@ REPO_DIR: /data/16t/wxh/dinov3
 pretrained: true
 iou_thres: 0.45
 conf_thres: 0.05
-input_size:
+input_size_hw:
     - 640
     - 416
 train_batch_size: 14

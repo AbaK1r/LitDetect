@@ -1,13 +1,14 @@
+from collections import OrderedDict
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from collections import OrderedDict
 import torchvision
 from timm import create_model
 from torchvision.models.detection import FasterRCNN
 from torchvision.models.detection.rpn import AnchorGenerator
-from torchvision.ops import boxes as box_ops
 from torchvision.models.detection.rpn import concat_box_prediction_layers
+from torchvision.ops import boxes as box_ops
 
 
 class FasterRcnn(nn.Module):
@@ -18,7 +19,7 @@ class FasterRcnn(nn.Module):
             backbone_name='resnet34',
             iou_thres=0.45,
             conf_thres=0.05,
-            input_size=(512, 512),
+            input_size_hw=(512, 512),
             pretrained=False,
             REPO_DIR=None,
             weights_path=None
@@ -26,9 +27,9 @@ class FasterRcnn(nn.Module):
         super().__init__()
         self.iou_thres = iou_thres
         self.conf_thres = conf_thres
-        self.input_size = input_size
-        self.max_wh = max(*input_size)
-        self.min_wh = min(*input_size)
+        self.input_size = input_size_hw
+        self.max_wh = max(*input_size_hw)
+        self.min_wh = min(*input_size_hw)
         if backbone_type == 'torchvision':
             backbone = BackBone(model_name=backbone_name, pretrained=pretrained)
         elif backbone_type == 'dinov3':
