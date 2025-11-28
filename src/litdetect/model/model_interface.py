@@ -8,14 +8,6 @@ import torch.optim.lr_scheduler as lrs
 from pytorch_lightning.utilities.types import STEP_OUTPUT
 
 
-# from typing import Any
-
-# from model.validater.detection import DetectionValidator
-
-
-# from coco_eval import CocoEvaluator
-
-
 class ModuleInterface(pl.LightningModule):
     def __init__(self, **kwargs):
         super().__init__()
@@ -28,6 +20,8 @@ class ModuleInterface(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         log_dict = self.model.train_step(batch)
+        log_dict = {(k.replace('loss_', 'loss/') if k.startswith('loss_') else k): v
+                    for k, v in log_dict.items()}
         self.log_dict(log_dict, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True, batch_size=len(batch[0]))
         return log_dict
 
@@ -45,6 +39,11 @@ class ModuleInterface(pl.LightningModule):
                 'labels': t['labels'].to(DEVICE).int(),
                 'image_id': t['image_id'].to(DEVICE).int()
             } for t in batch[1]]
+            if self.hparams.model_name != 'detr_module' else [{
+                "boxes": sample["instances"].gt_boxes.tensor.to(DEVICE),
+                "labels": sample["instances"].gt_classes.to(DEVICE).long(),
+                "image_id": torch.tensor([sample["image_id"]], device=DEVICE).long()
+            } for sample in batch]
         }
 
     def test_step(self, *args: Any, **kwargs: Any) -> STEP_OUTPUT:
@@ -57,12 +56,12 @@ class ModuleInterface(pl.LightningModule):
             weight_decay = 1e-4
         if self.hparams.optimizer == 'adam':
             param_dicts = [
-                {"params": [p for n, p in self.named_parameters() if p.requires_grad]},
-                # {"params": [p for n, p in self.named_parameters() if "backbone" not in n and p.requires_grad]},
-                # {
-                #     "params": [p for n, p in self.named_parameters() if "backbone" in n and p.requires_grad],
-                #     "lr": self.hparams.lr_backbone,
-                # },
+                # {"params": [p for n, p in self.named_parameters() if p.requires_grad]},
+                {"params": [p for n, p in self.named_parameters() if "backbone" not in n and p.requires_grad]},
+                {
+                    "params": [p for n, p in self.named_parameters() if "backbone" in n and p.requires_grad],
+                    "lr": self.hparams.lr_backbone,
+                },
             ]
             optimizer = torch.optim.AdamW(
                 param_dicts, lr=self.hparams.lr, weight_decay=weight_decay)

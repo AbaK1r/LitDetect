@@ -6,7 +6,9 @@ from typing import Union, Optional, Dict
 import numpy as np
 import torch
 from PIL import Image, ImageDraw, ImageFont
+
 from litdetect.scripts_init import get_logger
+
 logger = get_logger(__name__)
 
 
@@ -61,8 +63,11 @@ def plot_images(
     n_cols = min(ns, math.ceil(bs / n_rows)) if n_rows > 0 else 0  # 实际需要的列数
 
     # Denormalize
-    if images.max() <= 1:
+    if images.max() <= 100:
+        if images.min() < 0:
+            images = (images - images.min()) / (images.max() - images.min())
         images *= 255
+        images.clip(0, 255)
     images = images.astype(np.uint8)
 
     # 创建马赛克图像（按行排列）

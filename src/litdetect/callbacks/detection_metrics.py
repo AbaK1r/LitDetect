@@ -59,7 +59,7 @@ class DetectionMetricsCallback(pl.Callback):
             extended_summary=True,  # 启用详细数据（包含精确率/召回率）
             backend="pycocotools"  # 使用pycocotools后端
         )
-
+        self.map_metric.warn_on_many_detections = False
         # 统计信息收集器
         self.class_stats = None
         self.total_images = 0

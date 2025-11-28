@@ -31,10 +31,16 @@ class PicRecordCallback(pl.Callback):
     ) -> None:
         if trainer.global_rank == 0 and len(self.data_dic["images"]) < 16:
             data_idx = len(self.data_dic["images"])
-            idx = random.choice(range(len(batch[0])))
+            if pl_module.hparams.model_name != 'detr_module':
+                idx = random.choice(range(len(batch[0])))
+            else:
+                idx = random.choice(range(len(batch)))
             choosed_pred = outputs["preds"][idx]
 
-            self.data_dic["images"].append(batch[0][idx].cpu().clone()[None])
+            if pl_module.hparams.model_name != 'detr_module':
+                self.data_dic["images"].append(batch[0][idx].cpu().clone()[None])  # 1CHW, float32, [0, 1] or [-n, +m]
+            else:
+                self.data_dic["images"].append(batch[idx]["image"].cpu().clone()[None])  # 1CHW, float32, [0, 255]
             if choosed_pred['boxes'].shape[0] > 0:
                 self.data_dic["bboxes"].append(choosed_pred["boxes"].cpu().clone())
                 self.data_dic["cls"].append(choosed_pred["labels"].cpu().clone().int())
