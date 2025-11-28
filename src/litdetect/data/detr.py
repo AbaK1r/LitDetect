@@ -97,19 +97,19 @@ class Detr(Dataset):
 
     def __getitem__(self, idx: int) -> Dict[str, Any]:
         item = self.item_list[idx]
-        image = cv2.imread(item['image_path'])
+        image = cv2.imread(item['image_path'], cv2.IMREAD_UNCHANGED | cv2.IMREAD_IGNORE_ORIENTATION)
         if image is None:
             raise FileNotFoundError(item['image_path'])
 
         orig_h, orig_w = image.shape[:2]
 
         # BGR → RGB, HWC uint8
-        if image.shape[2] == 3:
+        if len(image.shape) == 2:
+            image = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
+        elif image.shape[2] == 3:
             image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         elif image.shape[2] == 4:
             image = cv2.cvtColor(image, cv2.COLOR_BGRA2RGB)
-        elif len(image.shape) == 2:
-            image = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
 
         # Convert YOLO xywh (normed) → xyxy (abs)
         bboxes_xywh = item['bboxes_xywh']
