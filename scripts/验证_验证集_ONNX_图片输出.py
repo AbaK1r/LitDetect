@@ -15,6 +15,8 @@ from omegaconf import OmegaConf
 from torchmetrics.detection import MeanAveragePrecision
 from tqdm import tqdm
 
+print("可用provider:", onnxruntime.get_available_providers())
+
 logger = logging.getLogger(__name__)
 logging.basicConfig(
     level=logging.INFO,
@@ -58,6 +60,61 @@ def main():
     val(hparams_path, parser_args['ckpt_dir'], output_pred_path, output_label_path)
     if parser_args['concat']:
         concat_pred_gt_images(output_pred_path, output_label_path, Path(parser_args['output_path']) / 'concat_images')
+
+
+class DINO_OnnxInferer:
+    def __init__(self, model_path):
+        providers = ['CPUExecutionProvider']
+        if torch.cuda.is_available():
+            providers.insert(0, 'CUDAExecutionProvider')
+            # providers.insert(0, 'TensorrtExecutionProvider')
+        self.model = onnxruntime.InferenceSession(model_path, providers=providers)
+        self.input_name = self.model.get_inputs()[0].name
+        self.output_name = self.model.get_outputs()[0].name
+        self.input_shape = self.model.get_inputs()[0].shape
+        self.output_shape = self.model.get_outputs()[0].shape
+        self.pixel_mean = torch.Tensor([123.675, 116.280, 103.530]).view(3, 1, 1).numpy()
+        self.pixel_std = torch.Tensor([58.395, 57.120, 57.375]).view(3, 1, 1).numpy()
+
+    def inference(self, ipt, conf_threshold=0.05) -> List[Dict[str, np.ndarray]]:
+        ipt = (ipt - self.pixel_mean) / self.pixel_std
+        ipt = np.ascontiguousarray(ipt)
+        output = self.model.run(None, {self.input_name: ipt})[0].astype(np.float32)
+        output = self.postprocess(output, conf_threshold)
+        return output
+
+    def postprocess(self, outputs: np.ndarray, conf_threshold=0.05):
+        """
+
+        Args:
+            outputs: (B, N, xyxy+score+class)
+            conf_threshold:
+
+        Returns: List[Dict[str, np.ndarray]]
+
+        """
+        bs, n_box, _ = outputs.shape
+        b_bboxes = outputs[..., :4].reshape(bs, -1, 4)
+        b_scores = outputs[..., 4].reshape(bs, -1)
+        b_classes = outputs[..., 5].reshape(bs, -1).astype(np.int64)
+        H, W = self.input_shape[-2:]
+        outputs = []
+        for bboxes, scores, classes in zip(b_bboxes, b_scores, b_classes):
+            inds = np.where(scores > conf_threshold)[0]
+            bboxes, scores, classes = bboxes[inds], scores[inds], classes[inds]
+            if len(bboxes.shape) == 1:
+                bboxes, scores, classes = bboxes[None], scores[None], classes[None]
+            bboxes[:, 0] *= W
+            bboxes[:, 1] *= H
+            bboxes[:, 2] *= W
+            bboxes[:, 3] *= H
+            outputs.append({
+                'boxes': bboxes,  # (N, 4) xyxy
+                'scores': scores,  # (N, 1)
+                'labels': classes,  # (N, 1)
+            })
+
+        return outputs
 
 
 class FasterRCNN_OnnxInferer:
@@ -239,7 +296,16 @@ def val(args_path, onnx_path, output_pred_path: Path = None, output_label_path: 
         extended_summary=False,  # 启用详细数据（包含精确率/召回率）
         backend="pycocotools"  # 使用pycocotools后端
     )
-    inferer = (FasterRCNN_OnnxInferer if args.model_name == 'faster_rcnn' else Yolo11_OnnxInferer)(onnx_path)
+    if args.model_name == 'faster_rcnn':
+        INFERER = FasterRCNN_OnnxInferer
+    elif args.model_name == 'yolo11':
+        INFERER = Yolo11_OnnxInferer
+    elif args.model_name == 'detr_module':
+        INFERER = DINO_OnnxInferer
+    else:
+        raise ValueError(f'model_name must be faster_rcnn or yolo11, but got {args.model_name}')
+
+    inferer = INFERER(onnx_path)
 
     for meta in tqdm(item_list):
         raw_image = Image.open(meta['image_path']).convert('RGB')
@@ -248,14 +314,16 @@ def val(args_path, onnx_path, output_pred_path: Path = None, output_label_path: 
         x_size, y_size = raw_image.size
         bboxes = [xywh2xyxy([i[0] * x_size, i[1] * y_size, i[2] * x_size, i[3] * y_size]) for i in bboxes]
 
-        image, scale_params = letterbox(raw_image, args.input_size, 0)
+        image, scale_params = letterbox(raw_image, args.input_size_hw[::-1], 0)
         bboxes = [apply_scale_to_coords(bbox, scale_params, 'xyxy') for bbox in bboxes]
         target = {
             'boxes': torch.tensor(bboxes).float(),
             'labels': torch.tensor(labels).int(),
         }
 
-        image = np.transpose(image, (2, 0, 1)).astype(np.float32) / 255.
+        image = np.transpose(image, (2, 0, 1)).astype(np.float32)
+        if not args.model_name == 'detr_module':
+            image = image / 255.
         preds = inferer.inference(image[None], conf_threshold=0.05)[0]
         # print(preds, target)
         if output_pred_path is not None:

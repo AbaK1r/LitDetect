@@ -42,14 +42,14 @@ class Detr(Dataset):
                     scale=(0.8, 1.2),  # Zoom in/out by 80-120%
                     rotate=(-30, 30),  # Rotate by -30 to +30 degrees
                     balanced_scale=True,
-                    translate_percent=(0, 0.1), # Optional: translate by 0-10%
-                    shear=(-10, 10),          # Optional: shear by -10 to +10 degrees
-                    p=0.6
+                    # translate_percent=(0, 0.1), # Optional: translate by 0-10%
+                    # shear=(-10, 10),          # Optional: shear by -10 to +10 degrees
+                    p=0.3
                 ),
-                A.CoarseDropout(num_holes_range=(1, 8), hole_height_range=(0.1, 0.25),
-                               hole_width_range=(0.1, 0.25), p=0.2),
+                # A.CoarseDropout(num_holes_range=(1, 8), hole_height_range=(0.1, 0.25),
+                #                hole_width_range=(0.1, 0.25), p=0.2),
                 # A.RandomBrightnessContrast(p=0.2),
-                A.GaussianBlur(p=0.2),
+                # A.GaussianBlur(p=0.2),
                 A.Sequential([
                     A.SmallestMaxSize(max_size=int(max(self.input_size_hw) * 1.25), p=1.0),
                     A.RandomCrop(height=self.input_size_hw[1], width=self.input_size_hw[0], p=1.0)
@@ -118,7 +118,7 @@ class Detr(Dataset):
             xywh2xyxy([cx * orig_w, cy * orig_h,
                        w  * orig_w, h  * orig_h])
             for cx, cy, w, h in bboxes_xywh
-        ], dtype=np.float32)
+        ], dtype=np.float32).clip(min=0)
 
         # Apply transforms (only geometric)
         transformed = self.transforms(image=image, bboxes=bboxes_xyxy, labels=labels)

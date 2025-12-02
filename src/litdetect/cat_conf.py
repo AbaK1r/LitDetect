@@ -1,10 +1,11 @@
 import json
+from pathlib import Path
 
 import hydra
 from omegaconf import DictConfig, OmegaConf
 
 
-@hydra.main(config_path="conf", config_name="config", version_base=None)
+@hydra.main(config_path=str(Path.cwd()/"conf"), config_name="config", version_base=None)
 def main(cfg: DictConfig):
     cfg_dict = OmegaConf.to_container(cfg, resolve=True)
     print(json.dumps(cfg_dict, indent=4, ensure_ascii=False))

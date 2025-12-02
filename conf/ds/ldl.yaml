@@ -1,5 +1,6 @@
 dataset_name: 六大类
 num_classes: 6
 class_name: [四肢, 头, 心, 母体及胎儿附属物, 脊柱, 腹部]
-ano_root: /data/16t/lrh/datasets/胎儿超声/大类/训练/labels
-image_root: /data/16t/lrh/datasets/胎儿超声/大类/训练/images
+ano_root: /data/7t/lrh/datasets/胎儿超声/大类/训练/labels
+image_root: /data/7t/lrh/datasets/胎儿超声/大类/训练/images
+input_size_hw: [416, 640]

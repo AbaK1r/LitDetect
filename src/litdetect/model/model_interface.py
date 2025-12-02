@@ -13,7 +13,8 @@ class ModuleInterface(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters()
         self.model = self.instancialize()
-        self.detection_validater = None
+        if self.hparams.compile:
+            self.model = torch.compile(self.model)
 
     def forward(self, *args, **kwargs):
         return self.model(*args, **kwargs)

@@ -29,6 +29,12 @@ def parse_args():
         default=1
     )
 
+    parser.add_argument(
+        "-c", "--not_use_cuda",
+        action="store_false",
+        help="use cuda or not"
+    )
+
     args = parser.parse_args()
 
     # 将结果转换为 int
@@ -45,17 +51,19 @@ def parse_args():
     else:
         raise ValueError("Please provide a valid batch size.")
 
-    return version, dynamic, batchsize
+    return version, dynamic, batchsize, args.not_use_cuda
 
 
 @torch.no_grad()
-def export_onnx(ckpt_path, torch_model, input_shape, dynamic=False):
+def export_onnx(ckpt_path, torch_model, input_shape, dynamic=False, use_cuda=False):
     ckpt_path = Path(ckpt_path)
     export_onnx_path = str(
         ckpt_path.parent / ('.'.join(ckpt_path.name.split('.')[:-1]) + ('_dynamic.onnx' if dynamic else f'_bs_{input_shape[0]}.onnx'))
     )
 
-    dummy_input = torch.randn(input_shape).to('cuda')
+    dummy_input = torch.randn(input_shape)
+    if use_cuda:
+        dummy_input = dummy_input.cuda()
     output = torch_model(dummy_input)
     logger.info(f"Model output shape: {output.shape}")
 
@@ -70,7 +78,7 @@ def export_onnx(ckpt_path, torch_model, input_shape, dynamic=False):
         export_onnx_path,
         export_params=True,
         dynamic_axes=dynamic_axes,
-        opset_version=20,
+        opset_version=16,
         input_names=['input'],
         output_names=['output']
     )
@@ -82,7 +90,8 @@ def export_onnx(ckpt_path, torch_model, input_shape, dynamic=False):
 
 
 def main():
-    version, dynamic, batchsize = parse_args()
+    version, dynamic, batchsize, use_cuda = parse_args()
+    logger.info(f"use_cuda: {use_cuda}")
     ddir = Path(f'lightning_logs/version_{version}/ckpts/')
     # 加载配置参数
     args = OmegaConf.load(ddir.parent / 'hparams.yaml')
@@ -99,8 +108,10 @@ def main():
     logger.info(f'Load ckpt: {ckpt}')
 
     # 加载模型和数据集
-    model = ModuleInterface.load_from_checkpoint(checkpoint_path=ckpt, **args).eval().cuda()
-    export_onnx(ckpt, model, input_shape=(batchsize, 3, *args.input_size[::-1]), dynamic=dynamic)
+    model = ModuleInterface.load_from_checkpoint(checkpoint_path=ckpt, map_location='cpu', **args).eval()
+    if use_cuda:
+        model.cuda()
+    export_onnx(ckpt, model, input_shape=(batchsize, 3, *args.input_size_hw), dynamic=dynamic, use_cuda=use_cuda)
 
 
 if __name__ == '__main__':

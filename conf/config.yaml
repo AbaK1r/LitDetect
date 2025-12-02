@@ -19,6 +19,7 @@ run:
     lr_step_size: 2
     lr_gamma: 0.99
     early_stop: true
+    compile: false
 
     optimizer: muon
     muon_lr: 1e-3
