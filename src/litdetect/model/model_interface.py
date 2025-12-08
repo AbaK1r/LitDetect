@@ -11,7 +11,6 @@ from litdetect.scripts_init import get_logger
 logger = get_logger(__file__)
 
 
-# noinspection PyArgumentList
 class ModuleInterface(pl.LightningModule, ABC):
     def __init__(self, **kwargs):
         super().__init__()

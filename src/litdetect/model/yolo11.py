@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from ultralytics.nn.tasks import DetectionModel
 from ultralytics.utils import DEFAULT_CFG
-from ultralytics.utils import ops
+from ultralytics.utils.nms import non_max_suppression
 
 from litdetect.model.model_interface import ModuleInterface
 from litdetect.scripts_init import get_logger
@@ -162,7 +162,7 @@ class Yolo11(nn.Module):
 
     def val_step(self, batch):
         preds = self.model(batch["img"], augment=False)
-        results = ops.non_max_suppression(
+        results = non_max_suppression(
             preds,
             self.conf_thres,
             self.iou_thres,
