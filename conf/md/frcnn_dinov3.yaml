@@ -1,14 +1,30 @@
-model_name: faster_rcnn
-backbone_name: convnext_small
-backbone_type: dinov3
-weights_path: /data/16t/wxh/ds/ckpts/dinov3_convnext_small_pretrain_lvd1689m-296db49d.pth
-REPO_DIR: /data/16t/wxh/dinov3
-pretrained: true
-iou_thres: 0.45
-conf_thres: 0.05
-input_size_hw:
-    - 640
-    - 416
-train_batch_size: 14
-val_batch_size: 5
-num_workers: 16
+model:
+  _target_: litdetect.model.faster_rcnn.ModuleWrapper
+  model_name: frcnn_convnext_small_dinov3
+  backbone_name: convnext_small
+  backbone_type: dinov3
+  weights_path: /data/16t/wxh/ds/ckpts/dinov3_convnext_small_pretrain_lvd1689m-296db49d.pth
+  REPO_DIR: /data/16t/wxh/dinov3
+  pretrained: true
+  iou_thres: 0.45
+  conf_thres: 0.05
+
+  optimizer: adam
+  lr: 1e-4
+  lr_backbone: 3e-5
+  weight_decay: 1e-4
+  lr_step_size: 1
+  lr_gamma: 0.975
+
+data:
+  input_size_hw: [ 416, 640 ]
+
+  train_batch_size: 14
+  val_batch_size: 5
+  num_workers: 16
+
+trainer:
+  num_sanity_val_steps: 0
+  gradient_clip_val: 0.2
+  check_val_every_n_epoch: null
+  val_check_interval: 1000

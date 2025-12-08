@@ -1,17 +1,24 @@
-model_name: detr_module
-config_path: /data/16t/wxh/detrex/projects/dino/configs/dino-convnext/dino_convnext_small_384_4scale_12ep.py
-pretrained_weights: /data/16t/wxh/ds/ckpts/dino_convnext_small_384_4scale_12ep.pth
-conf_thres: 0.05
+model:
+  _target_: litdetect.model.detr_module.ModuleWrapper
+  model_name: dino
+  config_path: /data/16t/wxh/detrex/projects/dino/configs/dino-convnext/dino_convnext_small_384_4scale_12ep.py
+  pretrained_weights: /data/16t/wxh/ds/ckpts/dino_convnext_small_384_4scale_12ep.pth
+  conf_thres: 0.05
 
-dataset: detr
+  optimizer: adam
+  lr: 1e-4
+  lr_backbone: 3e-5
+  weight_decay: 1e-4
+  lr_step_size: 1
+  lr_gamma: 0.975
 
-optimizer: adam
-lr: 1e-4
-lr_backbone: 3e-5
-weight_decay: 1e-4
-lr_step_size: 1
-lr_gamma: 0.975
+data:
+  train_batch_size: 24
+  val_batch_size: 24
+  num_workers: 24
 
-train_batch_size: 24
-val_batch_size: 24
-num_workers: 24
+trainer:
+  num_sanity_val_steps: 0
+  gradient_clip_val: 0.2
+  check_val_every_n_epoch: null
+  val_check_interval: 1000

@@ -1,12 +1,17 @@
 import importlib
 import inspect
-import logging
+import traceback
 
-import pytorch_lightning as pl
+import hydra
+from pytorch_lightning import LightningDataModule
 from torch.utils.data import DataLoader
 
+from litdetect.scripts_init import get_logger
 
-class DataInterface(pl.LightningDataModule):
+logger = get_logger(__file__)
+
+
+class DataInterface(LightningDataModule):
     def __init__(self, **kwargs):
         super().__init__()
         self.save_hyperparameters()
@@ -18,14 +23,14 @@ class DataInterface(pl.LightningDataModule):
 
     def setup(self, stage):
         # Assign train/val datasets for use in dataloaders
-        logging.info(f'stage is {stage}, set dataset')
+        logger.info(f'stage is {stage}, set dataset')
         if stage == 'fit':
             self.trainset, self.collate_fn = self.instancialize(data_mode='train', dataset=self.hparams.dataset)
             self.valset, _ = self.instancialize(data_mode='val', dataset=self.hparams.dataset)
         elif stage == 'validate':
             self.valset, self.collate_fn = self.instancialize(data_mode='val', dataset=self.hparams.dataset)
         elif stage == 'test':
-            self.testset, self.collate_fn = self.instancialize(data_mode='val', dataset=self.hparams.dataset)
+            self.testset, self.collate_fn = self.instancialize(data_mode='test', dataset=self.hparams.dataset)
         elif stage == 'predict':
             self.predictset, self.collate_fn = self.instancialize(data_mode='pred', dataset=self.hparams.dataset)
 
@@ -61,30 +66,34 @@ class DataInterface(pl.LightningDataModule):
         """ Instancialize a model using the corresponding parameters
             from self.hparams dictionary. You can also input any args
             to overwrite the corresponding value in self.hparams.
-        """  # real_colon RealColon
-        camel_name = ''.join([i.capitalize() for i in dataset.split('_')])
-        # print(camel_name)
+        """
+        dataset_module = '.'.join(dataset.split('.')[:-1])
+        dataset_name = dataset.split('.')[-1]
+
         try:
             data_module = getattr(importlib.import_module(
-                '.' + dataset, package=__package__), camel_name)
-            # data_module = getattr(importlib.import_module('.real_colon', package='data'), 'RealColon')
-            # data_module = RealColon  # data_module赋值为一个class名
-            # a = data_module()  # 类的实例化
-        except:
-            raise ValueError(
-                f'Invalid Dataset File Name or Invalid Class Name data.{dataset}.{camel_name}')
+                dataset_module, package=__package__), dataset_name)
+        except Exception as e:
+            logger.error(f'Import Error: Failed to import \"{dataset_name}\" from \"{dataset_module}\"')
+            traceback.print_exc()
+            raise e
 
         class_args = inspect.getfullargspec(data_module.__init__).args[1:]
 
         args = {arg: self.hparams[arg] for arg in class_args if arg in self.hparams.keys()}
         args.update(other_args)
 
+        transforms = hydra.utils.instantiate(
+            self.hparams.augmentation_train
+            if other_args['data_mode'] == 'train'
+            else self.hparams.augmentation_val)
+
         try:
             collate_fn = getattr(importlib.import_module(
-                '.' + dataset, package=__package__), 'collate_fn')
-            logging.info('collate_fn was successfully loaded.')
-        except:
+                dataset_module, package=__package__), 'collate_fn')
+            logger.info('collate_fn was successfully loaded.')
+        except ImportError:
             collate_fn = None
-            logging.info('collate_fn not found! Use default collate_fn.')
+            logger.info('collate_fn not found! Use default collate_fn.')
 
-        return data_module(**args), collate_fn
+        return data_module(transforms=transforms, **args), collate_fn

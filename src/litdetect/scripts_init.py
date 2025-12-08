@@ -1,7 +1,11 @@
 import logging
+import os
+import shutil
+import traceback
 from pathlib import Path
 
 from colorama import Fore, Style
+from pytorch_lightning.utilities import rank_zero_only
 
 # 初始化日志器
 logger = logging.getLogger(__name__)
@@ -63,3 +67,68 @@ def check_version(version):
             f"请检查版本号是否正确，可选版本：{', '.join(str(i) for i in versions)}{Style.RESET_ALL}"
         )
     return version
+
+
+@rank_zero_only
+def copy_code(tensorboard_logger):
+    """
+    Copy code to tensorboard_logger.log_dir
+    :param tensorboard_logger:
+        TensorBoardLogger
+    :return: None
+    """
+    src_dirs = [Path('src'), Path('conf')]
+    dst_dir = Path(tensorboard_logger.log_dir) / 'code'
+    dst_dir.mkdir(parents=True, exist_ok=True)
+    copy_code_to_log_dir(src_dirs, dst_dir)
+
+def ignore_pycache(dir, files):
+    """
+    Filters out the '__pycache__' directory and its contents.
+
+    :param dir: Directory path (not used).
+    :param files: List of files/directories in the given directory.
+    :return: List of files/directories to ignore.
+    """
+    return [f for f in files if f.startswith("__pycache__")]
+
+
+def copy_code_to_log_dir(src_dirs, dst_dir):
+    """
+    Copies the content of source directories to destination directory.
+
+    :param src_dirs: List of source directories to copy from.
+    :param dst_dir: Destination directory to copy to.
+    """
+    for src_dir in src_dirs:
+        if src_dir.exists() and src_dir.is_dir():
+            logger.info(f'copy {src_dir} to {dst_dir / src_dir.name}')
+            shutil.copytree(src_dir, dst_dir / src_dir.name, dirs_exist_ok=True, ignore=ignore_pycache)
+        else:
+            logger.info(f'缺失文件夹{src_dir.name}，已跳过！')
+
+
+@rank_zero_only
+def copy_config(lightning_log_dir: Path, hydra_config_src_dir: Path):
+    """
+    将Hydra配置链接或复制到Lightning日志目录
+
+    Args:
+        lightning_log_dir: Lightning的日志目录（包含version_X）
+        hydra_config_src_dir: Hydra输出目录
+    """
+
+    hydra_config_dst_dir = lightning_log_dir / "hydra_config"
+    hydra_config_src_file = hydra_config_src_dir / ".hydra/config.yaml"
+    hydra_config_dst_file = lightning_log_dir / "full_config.yaml"
+    try:
+        if hydra_config_dst_dir.exists() or hydra_config_dst_file.exists():
+            raise FileExistsError
+
+        shutil.copy(hydra_config_src_file, hydra_config_dst_file)
+        logger.info(f"Copied: {hydra_config_src_file} -> {hydra_config_dst_file}")
+        os.symlink(hydra_config_src_dir, hydra_config_dst_dir, target_is_directory=True)
+        logger.info(f"Created symlink: {hydra_config_dst_dir} -> {hydra_config_src_dir}")
+    except Exception as e:
+        logger.error(f"An error occurred while copying the config: {e}")
+        traceback.print_exc()

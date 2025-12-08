@@ -1,38 +1,34 @@
+import cv2
+cv2.setNumThreads(0)
+
 import warnings
 from pathlib import Path
 from typing import List, Dict, Any
 
-import cv2
-
-cv2.setNumThreads(0)
 import numpy as np
 import torch
 from torch.utils.data import Dataset
 import albumentations as A
-
-from detectron2.structures import Boxes, Instances
 
 from .scale_tookits import xywh2xyxy
 
 warnings.filterwarnings('ignore', message='loadtxt: input contained no data')
 
 
-class Detr(Dataset):
+class LitDetectDataset(Dataset):
     def __init__(
         self,
         transforms: A.BasicTransform,
         ano_root: str,
         image_root: str,
         input_size_hw=(672, 389),  # (h, w), only for *augmentation*, NOT resize to fixed
-        data_mode: str = 'train',
+        data_mode: str = 'train'
     ):
         self.ano_root = Path(ano_root)
         self.image_root = Path(image_root)
         self.train = data_mode == 'train'
         self.input_size_hw = input_size_hw  # used for augmentation only
 
-        # Detectron2 默认输入是 [0, 255] uint8 float32，且不 Normalize/ToTensor in dataset
-        # 此处仅做几何增强
         self.transforms = transforms
 
         # Load data list
@@ -95,30 +91,24 @@ class Detr(Dataset):
 
         # Apply transforms (only geometric)
         transformed = self.transforms(image=image, bboxes=bboxes_xyxy, labels=labels)
-        aug_image = transformed['image']  # CHW uint8, RGB
+        aug_image = transformed['image'].to(torch.float32)
         aug_bboxes = torch.as_tensor(transformed['bboxes'], dtype=torch.float32)
         aug_labels = torch.as_tensor(transformed['labels'], dtype=torch.int64)
 
-        # Construct Detectron2 Instances
-        instances = Instances((aug_image.shape[0], aug_image.shape[1]))
         if len(aug_bboxes) > 0:
-            instances.gt_boxes = Boxes(aug_bboxes)  # (n, 4) (x1, y1, x2, y2)
-            instances.gt_classes = aug_labels
+            bboxes = aug_bboxes  # (n, 4) (x1, y1, x2, y2)
+            labels = aug_labels
         else:
-            # empty instances
-            instances.gt_boxes = Boxes(torch.zeros((0, 4), dtype=torch.float32))
-            instances.gt_classes = torch.zeros(0, dtype=torch.int64)
-
-        # Return Detectron2-style dict
-        # Important: image must be CHW float32 in [0, 255]
-        image_tensor = aug_image.to(torch.float32)  # [3, H, W], float32, 0~255
+            bboxes = torch.zeros((0, 4), dtype=torch.float32)
+            labels = torch.zeros(0, dtype=torch.int64)
 
         return {
-            "image": image_tensor,                # CHW, float32, [0, 255]
-            "height": self.input_size_hw[0],      # height (for evaluation rescaling)
-            "width": self.input_size_hw[1],       # width
-            "image_id": idx,                      # scalar int/long
-            "instances": instances,               # Instances object
+            'image': aug_image,                                         # transformed image
+            'bboxes': bboxes,                                           # (n, 4) (x1, y1, x2, y2)
+            'labels': labels,                                           # (n,) torch.int64
+            'orig_size': (orig_h, orig_w),                              # (2)
+            'input_size_hw': self.input_size_hw,                        # (2)
+            'image_id': torch.tensor([idx], dtype=torch.int64),    # scalar int
         }
 
 
@@ -129,9 +119,6 @@ def collate_fn(batch: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     Dataloader batch_size = N ⇒ len(batch) = N.
     """
     return batch  # Just return as-is. Detectron2 trainer expects List[dict]
-
-
-from typing import Any
 
 
 def summarize_tensor_structure(x: Any, indent: int = 0) -> None:

@@ -10,6 +10,48 @@ from torchvision.models.detection.rpn import AnchorGenerator
 from torchvision.models.detection.rpn import concat_box_prediction_layers
 from torchvision.ops import boxes as box_ops
 
+from litdetect.model.model_interface import ModuleInterface
+from litdetect.scripts_init import get_logger
+
+logger = get_logger(__file__)
+
+
+class ModuleWrapper(ModuleInterface):
+
+    @property
+    def model_class(self):
+        return FasterRcnn
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    @staticmethod
+    def input_batch_trans(batch):
+        """
+
+        Args:
+            batch: [{
+                'image':           # CHW, float32, nomalized
+                'bboxes':          # (n, 4) (x1, y1, x2, y2)
+                'labels':          # (n,)
+                'orig_size':       # (2)
+                'input_size_hw':   # (2)
+                'image_id':        # scalar int/long
+            }]
+
+        Returns:
+
+        """
+        return (
+            [i["image"] for i in batch],
+            [
+                {
+                    "boxes": i["bboxes"],
+                    "labels": i["labels"]
+                } for i in batch
+            ]
+        )
+
 
 class FasterRcnn(nn.Module):
     def __init__(

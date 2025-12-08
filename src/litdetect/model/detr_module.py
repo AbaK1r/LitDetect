@@ -5,8 +5,90 @@ import torch.nn as nn
 import torch.nn.functional as F
 from detectron2.checkpoint import DetectionCheckpointer
 from detectron2.config import LazyConfig, instantiate
-from detectron2.structures import Instances
-from detectron2.utils.events import EventStorage
+from detectron2.structures import Boxes, Instances
+
+from litdetect.model.model_interface import ModuleInterface
+from litdetect.scripts_init import get_logger
+
+logger = get_logger(__file__)
+
+
+class ModuleWrapper(ModuleInterface):
+
+    @property
+    def model_class(self):
+        return DetrModule
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    @staticmethod
+    def input_batch_trans(batch):
+        """
+
+        Args:
+            batch: [{
+                'image':           # CHW, float32, nomalized
+                'bboxes':          # (n, 4) (x1, y1, x2, y2)
+                'labels':          # (n,)
+                'orig_size':       # (2)
+                'input_size_hw':   # (2)
+                'image_id':        # scalar int/long
+            }]
+
+        Returns:
+            batch: [{
+                "image":           # CHW, float32, nomalized
+                "height":          # height (for evaluation rescaling)
+                "width":           # width
+                "instances":       # Instances object
+            }]
+
+        """
+        return [
+            {
+                'image': i['image'],
+                'height': i['orig_size'][0],
+                'width': i['orig_size'][1],
+                'instances': Instances(
+                    image_size=(i['input_size_hw'][0], i['input_size_hw'][1]),
+                    gt_boxes=Boxes(i['bboxes']),
+                    gt_classes=i['labels']
+                )
+            } for i in batch
+        ]
+
+    def configure_optimizers(self):
+        if hasattr(self.hparams, 'weight_decay'):
+            weight_decay = self.hparams.weight_decay
+        else:
+            weight_decay = 1e-4
+        if self.hparams.optimizer != 'adam':
+            logger.warn('Only AdamW optimizer is supported for now!')
+
+        param_dicts = [
+            {"params": [p for n, p in self.named_parameters() if "backbone" not in n and p.requires_grad]},
+            {"params": [p for n, p in self.named_parameters() if "backbone" in n and p.requires_grad],
+             "lr": self.hparams.lr_backbone},
+        ]
+        optimizer = torch.optim.AdamW(
+            param_dicts,
+            lr=self.hparams.lr,
+            weight_decay=weight_decay
+        )
+
+        if self.hparams.lr_scheduler is None:
+            return optimizer
+        else:
+            if self.hparams.lr_scheduler == 'step':
+                scheduler = torch.optim.lr_scheduler.StepLR(
+                    optimizer, step_size=self.hparams.lr_step_size, gamma=self.hparams.lr_gamma)
+            else:
+                raise ValueError('Invalid lr_scheduler type!')
+            return {
+                'optimizer': optimizer,
+                'lr_scheduler': {'scheduler': scheduler}
+            }
 
 
 class DetrModule(nn.Module):
@@ -21,7 +103,7 @@ class DetrModule(nn.Module):
         super().__init__()
         self.conf_thres = conf_thres
 
-        # === Step 1: Load config ===
+        # === Load config ===
         if config_path is not None:
             self.cfg = LazyConfig.load(config_path)
         elif config_dict is not None:
@@ -35,7 +117,7 @@ class DetrModule(nn.Module):
         else:
             raise ValueError("cfg.model.num_classes must be set, but not found.")
 
-        # === Step 2: Build model (Detectron2 style) ===
+        # === Build model (Detectron2 style) ===
         # Important: use instantiate, NOT build_model(cfg)
         self.model = instantiate(self.cfg.model)
 
@@ -158,25 +240,20 @@ class DetrModule(nn.Module):
         #
         # return output
 
+    def train_step(self, batch):
 
-    def sforward(self, batched_inputs):
         """
         Compatible with detrex forward signature.
         Input: List[dict], each dict has:
-            - "image": [3, H, W], float32, [0, 255] (unnormalized)
+            - "image": [3, H, W], float32, normalized
             - "height", "width": int (original size)
             - (optional) "instances": Instances (for training, not used in forward)
-        Output: List[dict], each dict has:
-            - "pred_boxes": Boxes (x1, y1, x2, y2) — unnormalized, image space
-            - "scores": [N]
-            - "pred_classes": [N]
+        Output: List[dict], IF TRAINING, each dict has:
+            - "loss_...": Tensor
+            IF EVALUATION, each dict has:
+            - "instances": Instances
         """
-        return self.model(batched_inputs)
-
-    def train_step(self, batch):
-        # Detectron2 models expect EventStorage for logging intermediate losses
-        with EventStorage():
-            loss_dict = self.model(batch)
+        loss_dict = self.model(batch)
 
         loss_dict['loss'] = sum(v for v in loss_dict.values() if isinstance(v, torch.Tensor))
 

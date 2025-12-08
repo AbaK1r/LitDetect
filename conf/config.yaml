@@ -1,43 +1,6 @@
 defaults:
-    - _self_
-    - trainer: si
-    - md@run: frcnn
-    - ds@run: jz
-
-run:
-    seed: 172
-    call_back_monitor: map_50
-    call_back_mode: max
-    csdp: ~
-    sdp: ~
-    dataset: yolo
-    cache_mode: disable
-    weight_decay: 1e-4
-    lr: 3e-4
-    lr_backbone: 1e-4
-    lr_scheduler: step
-    lr_step_size: 2
-    lr_gamma: 0.99
-    early_stop: true
-    compile: false
-
-    optimizer: muon
-    muon_lr: 1e-3
-    muon_weight_decay: 3e-3
-
-trainer:
-    num_sanity_val_steps: -1
-    max_epochs: 200
-    #benchmark: true
-    check_val_every_n_epoch: 1  # 每训练几轮验证一次
-    precision: 16-mixed  # 32-true or 16-mixed 训练精度，16-mixed可以提速，如果loss出nan了就改32-true
-    log_every_n_steps: 50
-    #profiler: simple
-    #sync_batchnorm: true
-    #limit_train_batches: 20
-    #limit_test_batches: 0.0
-    enable_progress_bar: true  # 开关进度条
-    enable_model_summary: true
-    gradient_clip_val: 0.5
-    #detect_anomaly: true
-    #accumulate_grad_batches: 2
+  - _self_
+  - base
+  - trainer: si
+  - md@_global_: dino
+  - ds@data: nodule_big2

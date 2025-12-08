@@ -1,10 +1,9 @@
 import random
 from pathlib import Path
-from typing import List, Any
+from typing import List, Any, Dict
 
 import pytorch_lightning as pl
 import torch
-from pytorch_lightning.utilities.types import STEP_OUTPUT
 
 from .plotting import plot_images
 
@@ -18,31 +17,26 @@ class PicRecordCallback(pl.Callback):
         self.save_pic_dir = save_pic_dir
 
     def on_validation_epoch_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
-        self.data_dic = dict(images=[], batch_idx=[], cls=[], bboxes=[], confs=[])
+        self.data_dic = dict(images=[], batch_idx=[], cls=[], boxes=[], confs=[])
 
     def on_validation_batch_end(
         self,
         trainer: pl.Trainer,
         pl_module: pl.LightningModule,
-        outputs: STEP_OUTPUT,
+        outputs: Dict[str, List[Dict[str, torch.Tensor]]],
         batch: Any,
         batch_idx: int,
         dataloader_idx: int = 0,
     ) -> None:
         if trainer.global_rank == 0 and len(self.data_dic["images"]) < 16:
             data_idx = len(self.data_dic["images"])
-            if pl_module.hparams.model_name != 'detr_module':
-                idx = random.choice(range(len(batch[0])))
-            else:
-                idx = random.choice(range(len(batch)))
-            choosed_pred = outputs["preds"][idx]
+            idx = random.choice(range(len(batch)))
+            choosed_pred: Dict[str, torch.Tensor] = outputs["preds"][idx]
+            # TODO: 修复采样错误
+            self.data_dic["images"].append(batch[idx]["image"].cpu().clone()[None])  # 1CHW, float32, [0, 255]
 
-            if pl_module.hparams.model_name != 'detr_module':
-                self.data_dic["images"].append(batch[0][idx].cpu().clone()[None])  # 1CHW, float32, [0, 1] or [-n, +m]
-            else:
-                self.data_dic["images"].append(batch[idx]["image"].cpu().clone()[None])  # 1CHW, float32, [0, 255]
             if choosed_pred['boxes'].shape[0] > 0:
-                self.data_dic["bboxes"].append(choosed_pred["boxes"].cpu().clone())
+                self.data_dic["boxes"].append(choosed_pred["boxes"].cpu().clone())
                 self.data_dic["cls"].append(choosed_pred["labels"].cpu().clone().int())
                 self.data_dic["confs"].append(choosed_pred["scores"].cpu().clone())
                 self.data_dic["batch_idx"].append(torch.full_like(choosed_pred["labels"], data_idx, device='cpu', dtype=torch.int))

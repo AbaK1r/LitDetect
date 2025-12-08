@@ -16,7 +16,7 @@ def plot_images(
         images: Union[np.ndarray, torch.Tensor],
         batch_idx: Union[np.ndarray, torch.Tensor],
         cls: Union[np.ndarray, torch.Tensor],
-        bboxes: Union[np.ndarray, torch.Tensor] = np.zeros((0, 4), dtype=np.float32),
+        boxes: Union[np.ndarray, torch.Tensor] = np.zeros((0, 4), dtype=np.float32),
         confs: Optional[Union[np.ndarray, torch.Tensor]] = None,
         fname: str = "images.jpg",
         names: Optional[Dict[int, str]] = None,
@@ -43,18 +43,18 @@ def plot_images(
     images = tensor_to_numpy(images)
     batch_idx = tensor_to_numpy(batch_idx)
     cls = tensor_to_numpy(cls)
-    bboxes = tensor_to_numpy(bboxes).astype(np.float64)
+    boxes = tensor_to_numpy(boxes).astype(np.float64)
     confs = tensor_to_numpy(confs) if confs is not None else None
 
     bs, _, h, w = images.shape
     bs = min(bs, max_subplots)
 
-    if bboxes.shape[0] > 0:
-        if bboxes.max() <= 1.0:
-            bboxes = np.clip(bboxes, 0, 1)
+    if boxes.shape[0] > 0:
+        if boxes.max() <= 1.0:
+            boxes = np.clip(boxes, 0, 1)
         else:
-            bboxes[:, [0, 2]] = np.clip(bboxes[:, [0, 2]], 0, w)
-            bboxes[:, [1, 3]] = np.clip(bboxes[:, [1, 3]], 0, h)
+            boxes[:, [0, 2]] = np.clip(boxes[:, [0, 2]], 0, w)
+            boxes[:, [1, 3]] = np.clip(boxes[:, [1, 3]], 0, h)
 
 
     # 计算网格尺寸（按行排列）
@@ -139,23 +139,23 @@ def plot_images(
 
         classes = cls[idx]
         conf = confs[idx] if confs is not None else [None] * len(classes)
-        boxes = bboxes[idx]
+        _boxes = boxes[idx]
 
         # 处理边界框坐标
         # 如果坐标是归一化的，转换为绝对坐标
-        if boxes[:, :4].max() <= 1.1:
-            boxes[:, [0, 2]] *= w  # 乘以原始宽度
-            boxes[:, [1, 3]] *= h  # 乘以原始高度
+        if _boxes[:, :4].max() <= 1.1:
+            _boxes[:, [0, 2]] *= w  # 乘以原始宽度
+            _boxes[:, [1, 3]] *= h  # 乘以原始高度
 
         # 应用整体缩放
-        boxes[:, [0, 2]] *= scale_x
-        boxes[:, [1, 3]] *= scale_y
+        _boxes[:, [0, 2]] *= scale_x
+        _boxes[:, [1, 3]] *= scale_y
 
         # 应用位置偏移
-        boxes[:, [0, 2]] += x_offset
-        boxes[:, [1, 3]] += y_offset
+        _boxes[:, [0, 2]] += x_offset
+        _boxes[:, [1, 3]] += y_offset
 
-        for j, box in enumerate(boxes):
+        for j, box in enumerate(_boxes):
             if conf is not None and conf[j] < conf_thres:
                 continue
 
@@ -227,7 +227,7 @@ if __name__ == "__main__":
         images=images,
         batch_idx=batch_idx,
         cls=cls,
-        bboxes=bboxes,
+        boxes=bboxes,
         confs=confs,
         fname="chinese_output.png",
         names=names,

@@ -1,34 +1,53 @@
-import importlib
 import inspect
-from typing import Any
+import traceback
+from abc import abstractmethod, ABC
+from typing import Any, Type, Dict, List
 
 import pytorch_lightning as pl
 import torch
-import torch.optim.lr_scheduler as lrs
-from pytorch_lightning.utilities.types import STEP_OUTPUT
+
+from litdetect.scripts_init import get_logger
+
+logger = get_logger(__file__)
 
 
-class ModuleInterface(pl.LightningModule):
+# noinspection PyArgumentList
+class ModuleInterface(pl.LightningModule, ABC):
     def __init__(self, **kwargs):
         super().__init__()
-        self.save_hyperparameters()
-        self.model = self.instancialize()
-        if self.hparams.compile:
-            self.model = torch.compile(self.model)
+        self.save_hyperparameters(ignore=['model_class'])
+        self.model = self._instantiate_model()
+        if self.hparams.get('compile', False):
+            try:
+                self.model = torch.compile(self.model)
+                logger.info(f"Using torch.compile for {self.model.__class__.__name__}")
+            except Exception as e:
+                logger.error(f"Failed to compile {self.model.__class__.__name__}:\n\t{e}")
+                traceback.print_exc()
+
+    @property
+    @abstractmethod
+    def model_class(self) -> Type[torch.nn.Module]:
+        """子类必须指定使用的模型类"""
+        raise NotImplementedError
 
     def forward(self, *args, **kwargs):
-        return self.model(*args, **kwargs)
+        """统一的前向接口"""
+        if hasattr(self.model, 'forward'):
+            return self.model(*args, **kwargs)
+        else:
+            raise NotImplementedError("Model must have forward method")
 
     def training_step(self, batch, batch_idx):
-        log_dict = self.model.train_step(batch)
+        log_dict = self.model.train_step(batch if not hasattr(self, 'input_batch_trans') else self.input_batch_trans(batch))
         log_dict = {(k.replace('loss_', 'loss/') if k.startswith('loss_') else k): v
                     for k, v in log_dict.items()}
-        self.log_dict(log_dict, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True, batch_size=len(batch[0]))
+        self.log_dict(log_dict, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True, batch_size=len(batch))
         return log_dict
 
-    def validation_step(self, batch, batch_idx):
+    def validation_step(self, batch, batch_idx) -> Dict[str, List[Dict[str, torch.Tensor]]]:
         DEVICE = self.device
-        preds = self.model.val_step(batch)
+        preds = self.model.val_step(batch if not hasattr(self, 'input_batch_trans') else self.input_batch_trans(batch))
         return {
             'preds': [{
                 'boxes': i[:, :4].to(DEVICE),
@@ -36,18 +55,13 @@ class ModuleInterface(pl.LightningModule):
                 'labels': i[:, 5].to(DEVICE).int()
             } for i in preds],
             'targets': [{
-                'boxes': t['boxes'].to(DEVICE),
-                'labels': t['labels'].to(DEVICE).int(),
-                'image_id': t['image_id'].to(DEVICE).int()
-            } for t in batch[1]]
-            if self.hparams.model_name != 'detr_module' else [{
-                "boxes": sample["instances"].gt_boxes.tensor.to(DEVICE),
-                "labels": sample["instances"].gt_classes.to(DEVICE).long(),
-                "image_id": torch.tensor([sample["image_id"]], device=DEVICE).long()
-            } for sample in batch]
+                'boxes': b['bboxes'].to(DEVICE),
+                'labels': b['labels'].to(DEVICE),
+                'image_id': b['image_id'].to(DEVICE)
+            } for b in batch]
         }
 
-    def test_step(self, *args: Any, **kwargs: Any) -> STEP_OUTPUT:
+    def test_step(self, *args: Any, **kwargs: Any):
         return self.validation_step(*args, **kwargs)
 
     def configure_optimizers(self):
@@ -57,12 +71,7 @@ class ModuleInterface(pl.LightningModule):
             weight_decay = 1e-4
         if self.hparams.optimizer == 'adam':
             param_dicts = [
-                # {"params": [p for n, p in self.named_parameters() if p.requires_grad]},
-                {"params": [p for n, p in self.named_parameters() if "backbone" not in n and p.requires_grad]},
-                {
-                    "params": [p for n, p in self.named_parameters() if "backbone" in n and p.requires_grad],
-                    "lr": self.hparams.lr_backbone,
-                },
+                {"params": [p for n, p in self.named_parameters() if p.requires_grad]},
             ]
             optimizer = torch.optim.AdamW(
                 param_dicts, lr=self.hparams.lr, weight_decay=weight_decay)
@@ -87,34 +96,24 @@ class ModuleInterface(pl.LightningModule):
             return optimizer
         else:
             if self.hparams.lr_scheduler == 'step':
-                scheduler = lrs.StepLR(optimizer, step_size=self.hparams.lr_step_size, gamma=self.hparams.lr_gamma)
-                # scheduler = lrs.ReduceLROnPlateau(
-                #     optimizer, mode='min', factor=0.33, patience=4, threshold=1e-6, min_lr=9e-7, cooldown=1)
+                scheduler = torch.optim.lr_scheduler.StepLR(
+                    optimizer, step_size=self.hparams.lr_step_size, gamma=self.hparams.lr_gamma)
             else:
                 raise ValueError('Invalid lr_scheduler type!')
             return {
                 'optimizer': optimizer,
-                'lr_scheduler': {
-                    'scheduler': scheduler,
-                    # 'monitor': 'loss_epoch',
-                }
+                'lr_scheduler': {'scheduler': scheduler}
             }
 
-    def instancialize(self, **other_args):
-        """
-        Instancialize a model using the corresponding parameters
-        from self.hparams dictionary. You can also input any args
-        to overwrite the corresponding value in self.kwargs.
-        """
-        camel_name = ''.join([i.capitalize() for i in self.hparams.model_name.split('_')])
-        try:
-            Model = getattr(importlib.import_module(
-                '.' + self.hparams.model_name, package=__package__), camel_name)
-        except:
-            raise ValueError(
-                f'Invalid Module File Name or Invalid Class Name {self.hparams.model_name}.{camel_name}!')
-        class_args = inspect.getfullargspec(Model.__init__).args[1:]
+    def _instantiate_model(self):
+        """自动提取模型参数并实例化"""
+        model_class = self.model_class
+        # 获取模型类的参数签名
+        sig = inspect.signature(model_class.__init__)
+        class_args = list(sig.parameters.keys())[1:]  # 排除self
 
-        args = {arg: self.hparams[arg] for arg in class_args if arg in self.hparams.keys()}
-        args.update(other_args)
-        return Model(**args)
+        # 从hparams中提取匹配的参数
+        model_kwargs = {arg: self.hparams[arg] for arg in class_args if arg in self.hparams.keys()}
+
+        logger.info(f"Instantiating {model_class.__name__} with kwargs: {model_kwargs}")
+        return model_class(**model_kwargs)

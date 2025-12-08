@@ -1,6 +1,6 @@
 dataset_name: LungNodule
 num_classes: 4
 class_name: [Calcified nodule, Solid nodule, Ground-glass nodule, Part-solid nodule]
-ano_root: /home/star/deeplearning/LungNodule/datasets/labels
-image_root: /home/star/deeplearning/LungNodule/datasets/images
+ano_root: /home/star/deeplearning/LungNodule/part3/datasets/labels
+image_root: /home/star/deeplearning/LungNodule/part3/datasets/images
 input_size_hw: [ 512, 512 ]

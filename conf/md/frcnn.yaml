@@ -1,13 +1,27 @@
-model_name: faster_rcnn
-backbone_name: convnext_small
-pretrained: true
-iou_thres: 0.45
-conf_thres: 0.05
-input_size_hw:
-    - 1280
-    - 736
-#    - 640
-#    - 416
-train_batch_size: 14
-val_batch_size: 5
-num_workers: 16
+model:
+  _target_: litdetect.model.faster_rcnn.ModuleWrapper
+  model_name: frcnn_convnext_small
+  backbone_name: convnext_small
+  pretrained: true
+  iou_thres: 0.45
+  conf_thres: 0.05
+
+  optimizer: adam
+  lr: 1e-4
+  lr_backbone: 3e-5
+  weight_decay: 1e-4
+  lr_step_size: 1
+  lr_gamma: 0.975
+
+data:
+  input_size_hw: [ 1280, 736 ]
+
+  train_batch_size: 14
+  val_batch_size: 5
+  num_workers: 16
+
+trainer:
+  num_sanity_val_steps: 0
+  gradient_clip_val: 0.2
+  check_val_every_n_epoch: null
+  val_check_interval: 1000

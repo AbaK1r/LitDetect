@@ -1,10 +1,85 @@
 import torch
 import torch.nn as nn
-# from torch import distributed as dist
-
 from ultralytics.nn.tasks import DetectionModel
 from ultralytics.utils import DEFAULT_CFG
 from ultralytics.utils import ops
+
+from litdetect.model.model_interface import ModuleInterface
+from litdetect.scripts_init import get_logger
+
+logger = get_logger(__file__)
+
+
+class ModuleWrapper(ModuleInterface):
+
+    @property
+    def model_class(self):
+        return Yolo11
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    @staticmethod
+    def input_batch_trans(batch):
+        """
+
+        Args:
+            batch: [{
+                'image':           # CHW, float32, nomalized
+                'bboxes':          # (n, 4) (x1, y1, x2, y2)
+                'labels':          # (n,)
+                'orig_size':       # (2)
+                'input_size_hw':   # (2)
+                'image_id':        # scalar int/long
+            }]
+
+        Returns:
+
+        """
+        device = batch[0]["image"].device
+        w, h = batch[0]["input_size_hw"][1], batch[0]["input_size_hw"][0]
+
+        images = [b["image"][None] for b in batch]
+        images = torch.cat(images, dim=0)
+
+        bboxes_list, labels_list, batch_idx_list = [], [], []
+
+        for i, b in enumerate(batch):
+            if len(b["bboxes"]) == 0:
+                continue
+
+            bboxes_list.append(b["bboxes"])
+            labels_list.append(b["labels"].view(-1, 1))
+            batch_idx_list.append(
+                torch.full((len(b["labels"]),),
+                           i,
+                           device=device,
+                           dtype=torch.long)
+            )
+
+        if len(bboxes_list):
+            bboxes = torch.cat(bboxes_list, dim=0).float()
+            cls = torch.cat(labels_list, dim=0).long()
+            batch_idx = torch.cat(batch_idx_list, dim=0).long()
+        else:
+            bboxes = torch.empty((0, 4), device=device)
+            cls = torch.empty((0, 1), device=device, dtype=torch.long)
+            batch_idx = torch.empty((0,), device=device, dtype=torch.long)
+
+        # xyxy -> xywh (norm)
+        if bboxes.numel() > 0:
+            x = (bboxes[:, 0] + bboxes[:, 2]) / 2 / w
+            y = (bboxes[:, 1] + bboxes[:, 3]) / 2 / h
+            bw = (bboxes[:, 2] - bboxes[:, 0]) / w
+            bh = (bboxes[:, 3] - bboxes[:, 1]) / h
+            bboxes = torch.stack([x, y, bw, bh], dim=1)
+
+        return {
+            "img": images,
+            "bboxes": bboxes,
+            "cls": cls,
+            "batch_idx": batch_idx
+        }
 
 
 class Yolo11(nn.Module):
@@ -44,12 +119,12 @@ class Yolo11(nn.Module):
                  [[16, 19, 22], 1, 'Detect', ['nc']]],
     }
 
-    def __init__(self, num_classes, class_name=None, scale='m', iou_thres=0.45, conf_thres=0.25, input_size_hw=(672, 389), max_det=300):
+    def __init__(self, num_classes, class_name=None, scale='m', iou_thres=0.45, conf_thres=0.25, input_size_hw=(389, 672), max_det=300):
         super().__init__()
-        assert num_classes == len(class_name), f"num_classes ({num_classes}) must equal to len(class_name) ({len(class_name)})"
-        assert len(scale) == 1 and scale in "nsmlx", f"scale must be one of 'nsmlx', but got {scale}"
         if class_name is None:
             class_name = [f'class_{i}' for i in range(num_classes)]
+        assert num_classes == len(class_name), f"num_classes ({num_classes}) must equal to len(class_name) ({len(class_name)})"
+        assert len(scale) == 1 and scale in "nsmlx", f"scale must be one of 'nsmlx', but got {scale}"
         self.yaml['nc'] = num_classes
         self.yaml['names'] = class_name
         self.yaml['scale'] = scale
@@ -76,41 +151,8 @@ class Yolo11(nn.Module):
         preds[..., :4] = ops.xywh2xyxy(preds[..., :4])  # xywh to xyxy (bs, n, 4 + nc)
         return preds
 
-    def preprocess(self, batch):
-        images, targets = batch
-        data_dic = {
-            "img": [i[None] for i in images],
-            "bboxes": [targets[idx]["boxes"] for idx in range(len(images))],
-            "cls": [targets[idx]["labels"][:, None] for idx in range(len(images))],
-            "batch_idx": [torch.full_like(targets[idx]["labels"], idx, device=images[0].device, dtype=torch.long) for idx
-                          in range(len(images))]
-        }
-        for k, v in data_dic.items():
-            if len(v) == 0:
-                if k == 'bboxes':
-                    data_dic[k] = torch.empty((0, 4), dtype=torch.float, device=images[0].device)
-                elif k == 'cls':
-                    data_dic[k] = torch.empty((0, 1), dtype=torch.long, device=images[0].device)
-                elif k == 'batch_idx':
-                    data_dic[k] = torch.empty((0,), dtype=torch.long, device=images[0].device)
-            elif len(v) == 1:
-                data_dic[k] = v[0]
-            else:
-                data_dic[k] = torch.cat(v, dim=0)
-            if k in ['cls', 'batch_idx']:
-                data_dic[k] = data_dic[k].long()
-        # xyxy2xywh
-        if data_dic['bboxes'].shape[0] > 0:
-            bboxes_x = (data_dic['bboxes'][:, 0] + data_dic['bboxes'][:, 2]) / 2 / self.w
-            bboxes_y = (data_dic['bboxes'][:, 1] + data_dic['bboxes'][:, 3]) / 2 / self.h
-            bboxes_w = (data_dic['bboxes'][:, 2] - data_dic['bboxes'][:, 0]) / self.w
-            bboxes_h = (data_dic['bboxes'][:, 3] - data_dic['bboxes'][:, 1]) / self.h
-            data_dic['bboxes'] = torch.stack([bboxes_x, bboxes_y, bboxes_w, bboxes_h], dim=1)
-        return data_dic
-
     def train_step(self, batch):
-        data_dic = self.preprocess(batch)
-        loss, loss_items = self.model(data_dic)
+        loss, loss_items = self.model(batch)
         return {
             'loss': loss.mean(),
             'box_loss': loss_items[0],
@@ -119,9 +161,7 @@ class Yolo11(nn.Module):
         }
 
     def val_step(self, batch):
-        images = batch[0]
-        # images = [tensor(3, h, w), ...]
-        preds = self.model(torch.cat([i[None] for i in images], dim=0), augment=False)
+        preds = self.model(batch["img"], augment=False)
         results = ops.non_max_suppression(
             preds,
             self.conf_thres,
