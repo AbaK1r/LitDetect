@@ -26,14 +26,14 @@ def parse_args():
     parser = argparse.ArgumentParser(description="arguments")
 
     parser.add_argument("-d", "--ckpt_dir", type=str, help="权重路径，必填")
-    parser.add_argument("-p", "--hparams_dir", type=str, help="配置文件路径", default='')
+    parser.add_argument("-p", "--config_dir", type=str, help="配置文件路径", default='')
     parser.add_argument("-i", "--input_dir", type=str, help="Input directory")  # 图片所在的路径
     parser.add_argument("-o", "--output_dir", type=str, help="Output directory", default='')  # 输出目录
     parser.add_argument("-s", "--suffix", type=str, help="Image suffix", default='.png')  # 图片后缀
     parser.add_argument("-t", "--threh", type=float, help="box conf threh", default=0.4)
 
     args = vars(parser.parse_args())
-    args['hparams_dir'] = None if args['hparams_dir'] == '' else args['hparams_dir']
+    args['config_dir'] = None if args['config_dir'] == '' else args['config_dir']
     args['output_dir'] = None if args['output_dir'] == '' else args['output_dir']
     
     return args
@@ -41,21 +41,21 @@ def parse_args():
 def main():
     parser_args = parse_args()
     assert Path(parser_args['ckpt_dir']).is_file(), f'{parser_args["ckpt_dir"]} is not a file or not exist.'
-    if parser_args['hparams_dir'] is None:
-        hparams_path = Path(parser_args['ckpt_dir']).parent.parent / 'hparams.yaml'
+    if parser_args['config_dir'] is None:
+        config_dir = Path(parser_args['ckpt_dir']).parent.parent / 'full_config.yaml'
     else:
-        hparams_path = Path(parser_args['hparams_dir'])
+        config_dir = Path(parser_args['config_dir'])
 
     output_pred_path = Path(parser_args['input_dir']).parent / f'onnx_pred' \
         if parser_args['output_dir'] == '' else Path(parser_args['output_dir'])
 
-    val(hparams_path, parser_args['input_dir'],
+    val(config_dir, parser_args['input_dir'],
         parser_args['ckpt_dir'], output_pred_path,
         parser_args['suffix'], parser_args['threh'])
 
 
-class FasterRCNN_OnnxInferer:
-    def __init__(self, model_path):
+class DINO_OnnxInferer:
+    def __init__(self, model_path, pixel_mean, pixel_std):
         providers = ['CPUExecutionProvider']
         if torch.cuda.is_available():
             providers.insert(0, 'CUDAExecutionProvider')
@@ -65,8 +65,67 @@ class FasterRCNN_OnnxInferer:
         self.output_name = self.model.get_outputs()[0].name
         self.input_shape = self.model.get_inputs()[0].shape
         self.output_shape = self.model.get_outputs()[0].shape
+        self.pixel_mean = torch.Tensor(pixel_mean).view(3, 1, 1).numpy()
+        self.pixel_std = torch.Tensor(pixel_std).view(3, 1, 1).numpy()
+
+    def inference(self, ipt, conf_threshold=0.05) -> List[Dict[str, np.ndarray]]:
+        ipt = (ipt - self.pixel_mean) / self.pixel_std
+        ipt = np.ascontiguousarray(ipt)
+        output = self.model.run(None, {self.input_name: ipt})[0].astype(np.float32)
+        output = self.postprocess(output, conf_threshold)
+        return output
+
+    def postprocess(self, outputs: np.ndarray, conf_threshold=0.05):
+        """
+
+        Args:
+            outputs: (B, N, xyxy+score+class)
+            conf_threshold:
+
+        Returns: List[Dict[str, np.ndarray]]
+
+        """
+        bs, n_box, _ = outputs.shape
+        b_bboxes = outputs[..., :4].reshape(bs, -1, 4)
+        b_scores = outputs[..., 4].reshape(bs, -1)
+        b_classes = outputs[..., 5].reshape(bs, -1).astype(np.int64)
+        H, W = self.input_shape[-2:]
+        outputs = []
+        for bboxes, scores, classes in zip(b_bboxes, b_scores, b_classes):
+            inds = np.where(scores > conf_threshold)[0]
+            bboxes, scores, classes = bboxes[inds], scores[inds], classes[inds]
+            if len(bboxes.shape) == 1:
+                bboxes, scores, classes = bboxes[None], scores[None], classes[None]
+            bboxes[:, 0] *= W
+            bboxes[:, 1] *= H
+            bboxes[:, 2] *= W
+            bboxes[:, 3] *= H
+            outputs.append({
+                'boxes': bboxes,  # (N, 4) xyxy
+                'scores': scores,  # (N, 1)
+                'labels': classes,  # (N, 1)
+            })
+
+        return outputs
+
+
+class FasterRCNN_OnnxInferer:
+    def __init__(self, model_path, pixel_mean, pixel_std):
+        providers = ['CPUExecutionProvider']
+        if torch.cuda.is_available():
+            providers.insert(0, 'CUDAExecutionProvider')
+            # providers.insert(0, 'TensorrtExecutionProvider')
+        self.model = onnxruntime.InferenceSession(model_path, providers=providers)
+        self.input_name = self.model.get_inputs()[0].name
+        self.output_name = self.model.get_outputs()[0].name
+        self.input_shape = self.model.get_inputs()[0].shape
+        self.output_shape = self.model.get_outputs()[0].shape
+        self.pixel_mean = torch.Tensor(pixel_mean).view(3, 1, 1).numpy()
+        self.pixel_std = torch.Tensor(pixel_std).view(3, 1, 1).numpy()
 
     def inference(self, ipt, conf_threshold=0.05, nms_threshold=0.45) -> List[Dict[str, np.ndarray]]:
+        ipt = (ipt - self.pixel_mean) / self.pixel_std
+        ipt = np.ascontiguousarray(ipt)
         output = self.model.run(None, {self.input_name: ipt})[0].astype(np.float32)
         output = self.postprocess(output, conf_threshold, nms_threshold)
         return output
@@ -101,15 +160,15 @@ class FasterRCNN_OnnxInferer:
                 bboxes, scores, classes = bboxes[None], scores[None], classes[None]
             outputs.append({
                 'boxes': bboxes,  # (N, 4) xyxy
-                'scores': scores,  # (N,)
-                'labels': classes,  # (N,)
+                'scores': scores,  # (N, 1)
+                'labels': classes,  # (N, 1)
             })
 
         return outputs
 
 
 class Yolo11_OnnxInferer:
-    def __init__(self, model_path):
+    def __init__(self, model_path, pixel_mean, pixel_std):
         providers = ['CPUExecutionProvider']
         if torch.cuda.is_available():
             providers.insert(0, 'CUDAExecutionProvider')
@@ -118,8 +177,12 @@ class Yolo11_OnnxInferer:
         self.output_name = self.model.get_outputs()[0].name
         self.input_shape = self.model.get_inputs()[0].shape
         self.output_shape = self.model.get_outputs()[0].shape
+        self.pixel_mean = torch.Tensor(pixel_mean).view(3, 1, 1).numpy()
+        self.pixel_std = torch.Tensor(pixel_std).view(3, 1, 1).numpy()
 
     def inference(self, ipt, *args, **kwargs) -> List[Dict[str, np.ndarray]]:
+        ipt = (ipt - self.pixel_mean) / self.pixel_std
+        ipt = np.ascontiguousarray(ipt)
         output = self.model.run(None, {self.input_name: ipt})[0].astype(np.float32)
         output = self.postprocess(output, *args, **kwargs)
         return output
@@ -192,8 +255,8 @@ class Yolo11_OnnxInferer:
 
             output[xi] = {
                 'boxes': x[:, :4],  # (N, 4) xyxy
-                'scores': x[:, 4],  # (N,)
-                'labels': np.round(x[:, 5]).astype(np.int64),  # (N,)
+                'scores': x[:, 4],  # (N, 1)
+                'labels': np.round(x[:, 5]).astype(np.int64),  # (N, 1)
             }
 
         return output
@@ -207,19 +270,29 @@ def val(args_path, data_dir, onnx_path, output_pred_path: Path = None, suffix=''
 
     args = OmegaConf.load(args_path)
 
-    inferer = (FasterRCNN_OnnxInferer if args.model_name == 'faster_rcnn' else Yolo11_OnnxInferer)(onnx_path)
+    if args.model._target_ == 'litdetect.model.faster_rcnn.ModuleWrapper':
+        INFERER = FasterRCNN_OnnxInferer
+    elif args.model._target_ == 'litdetect.model.yolo11.ModuleWrapper':
+        INFERER = Yolo11_OnnxInferer
+    elif args.model._target_ == 'litdetect.model.detr_module.ModuleWrapper':
+        INFERER = DINO_OnnxInferer
+    else:
+        raise ValueError(f'model must be faster_rcnn or yolo11 or detr, but got {args.model._target_}')
+
+    normalize_args = args.data.augmentation_val.transforms[-2]
+    inferer = INFERER(onnx_path, pixel_mean=normalize_args.mean, pixel_std=normalize_args.std)
 
     pic_paths = list(Path(data_dir).rglob(f'*{suffix}'))
     for pic_path in tqdm(pic_paths):
         image = Image.open(pic_path).convert('RGB')
-        image, scale_params = letterbox(image, args.input_size, 0)
+        image, scale_params = letterbox(image, args.data.input_size_hw[::-1], 0)
         image = np.transpose(image, (2, 0, 1)).astype(np.float32) / 255.
         preds = inferer.inference(image[None], conf_threshold=0.05)[0]
         
         if len(preds['scores']) > 0:
             preds = [{
                 "box": recover_original_coords(preds['boxes'][i].tolist(), scale_params, 'xyxy'),
-                "score": float(preds['scores'][i]), "class": args.class_name[int(preds['labels'][i])],
+                "score": float(preds['scores'][i]), "class": args.data.class_name[int(preds['labels'][i])],
             } for i in range(len(preds['scores'])) if preds['scores'][i] > threh]
             save_json(pic_path, preds, scale_params['orig_size'], Path(data_dir), output_pred_path)
 
