@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 
+import hydra
 import pytorch_lightning as pl
 import torch
 from omegaconf import DictConfig, OmegaConf
@@ -11,7 +12,6 @@ from pytorch_lightning.loggers import TensorBoardLogger
 from litdetect.callbacks import DetectionMetricsCallback, PicRecordCallback
 from litdetect.clearn_logs import remove_incomplete_versions
 from litdetect.data import DataInterface
-from litdetect.model import ModuleInterface
 from litdetect.scripts_init import get_logger, check_path, check_version
 
 # 初始化日志记录器
@@ -69,9 +69,9 @@ def main():
     for _version in _versions:
         ddir = Path(f'lightning_logs/version_{_version}/ckpts/')
         # 加载配置参数
-        args = OmegaConf.load(ddir.parent / 'hparams.yaml')
-        args.val_batch_size = 1
-        args.pretrained = False
+        args = OmegaConf.load(ddir.parent / 'full_config.yaml')
+        args.data.val_batch_size = 1
+        # args.pretrained = False
 
         # 加载检查点文件
         ckpts = ddir.rglob('*.ckpt')
@@ -81,24 +81,28 @@ def main():
             logger.error(f'No ckpt found in {ddir}')
             continue
         # 根据回调模式选择最佳检查点
-        ckpt = ckpts[-1][1] if args.call_back_mode == 'max' else ckpts[0][1]
+        ckpt = ckpts[-1][1] if args.callbacks.call_back_mode == 'max' else ckpts[0][1]
         logger.info(f'Load ckpt: {ckpt}')
 
         # 加载模型和数据集
-        model = ModuleInterface.load_from_checkpoint(
-            checkpoint_path=ckpt, map_location='cpu', strict=True, **args)
-        dl = DataInterface(**args)
+        # model = ModuleInterface.load_from_checkpoint(
+        #     checkpoint_path=ckpt, map_location='cpu', strict=True, **args)
+        model = hydra.utils.instantiate(args.model).eval()
+        sd = torch.load(ckpt, weights_only=False, map_location='cpu')['state_dict']
+        model.load_state_dict(sd, strict=False)
+
+        dl = DataInterface(**args.data)
 
         # 初始化回调列表
-        save_sheet_name = f"{args.model_name}_{args.dataset_name}_v{_version}"
+        save_sheet_name = f"{args.model.model_name}_{args.data.dataset_name}_v{_version}"
         call_back = [
             DetectionMetricsCallback(
-                args.class_name,
+                args.data.class_name,
                 iou_threshold=0.5,
                 save_xlsx_dir=save_xlsx_dir,
                 save_sheet_name=save_sheet_name
             ),
-            PicRecordCallback(args.class_name, 0.25, save_xlsx_dir.parent / save_sheet_name),
+            PicRecordCallback(args.data.class_name, 0.25, save_xlsx_dir.parent / save_sheet_name),
         ]
         if tensorboard_logger is None:
             tensorboard_logger = TensorBoardLogger('')

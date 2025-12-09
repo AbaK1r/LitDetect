@@ -1,18 +1,15 @@
 import argparse
-import colorsys
-import copy
+import json
 import logging
-import random
 from pathlib import Path
-from typing import List, Union, Dict, Tuple, Optional
+from typing import List, Dict, Union, Tuple
 
 import numpy as np
 import simple_trt_infer
 import torch
 import torchvision
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image
 from omegaconf import OmegaConf
-from torchmetrics.detection import MeanAveragePrecision
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
@@ -28,38 +25,35 @@ logging.basicConfig(
 def parse_args():
     parser = argparse.ArgumentParser(description="arguments")
 
-    parser.add_argument("-v", "--versions", type=int, help="lightning_log中的version数字", default=None)
     parser.add_argument("-d", "--ckpt_dir", type=str, help="权重路径，必填")
-    parser.add_argument("-o", "--output_path", type=str, help="保存预测结果的路径，可不填", default='')
-    parser.add_argument("-c", "--concat", help="拼接并保存GT和预测的图", action='store_true')
+    parser.add_argument("-p", "--config_dir", type=str, help="配置文件路径", default='')
+    parser.add_argument("-i", "--input_dir", type=str, help="Input directory")  # 图片所在的路径
+    parser.add_argument("-o", "--output_dir", type=str, help="Output directory", default='')  # 输出目录
+    parser.add_argument("-s", "--suffix", type=str, help="Image suffix", default='.png')  # 图片后缀
+    parser.add_argument("-t", "--threh", type=float, help="box conf threh", default=0.4)
     parser.add_argument("-e", "--encrypt", help="使用加密后的权重", action='store_true')
 
     args = vars(parser.parse_args())
-    args['output_path'] = None if args['output_path'] == '' else args['output_path']
-
-    from litdetect.scripts_init import check_version
-    args['versions'] = check_version(args['versions'])
-
-    # TODO: 如果不通过配置参数，则取消注释并使用下面的arg
-    # args = {
-    #     'versions': 0,
-    #     'ckpt_dir': '/data/16t/wxh/LitDetect/lightning_logs/version_86/ckpts/yolo11-epoch=130-map_50=0.79230_bs_1.onnx'
-    # }
+    args['config_dir'] = None if args['config_dir'] == '' else args['config_dir']
+    args['output_dir'] = None if args['output_dir'] == '' else args['output_dir']
+    
     return args
-
 
 def main():
     parser_args = parse_args()
-    hparams_path = Path(f'lightning_logs/version_{parser_args['versions']}/full_config.yaml')
-    if parser_args['output_path'] is None:
-        output_pred_path = output_label_path = None
+    assert Path(parser_args['ckpt_dir']).is_file(), f'{parser_args["ckpt_dir"]} is not a file or not exist.'
+    if parser_args['config_dir'] is None:
+        config_dir = Path(parser_args['ckpt_dir']).parent.parent / 'full_config.yaml'
     else:
-        output_pred_path = Path(parser_args['output_path']) / 'predictions'
-        output_label_path = Path(parser_args['output_path']) / 'labels'
-    val(hparams_path, parser_args['ckpt_dir'], output_pred_path, output_label_path, parser_args['encrypt'])
-    if parser_args['concat']:
-        concat_pred_gt_images(output_pred_path, output_label_path, Path(parser_args['output_path']) / 'concat_images')
+        config_dir = Path(parser_args['config_dir'])
 
+    output_pred_path = Path(parser_args['input_dir']).parent / f'onnx_pred' \
+        if parser_args['output_dir'] == '' else Path(parser_args['output_dir'])
+
+    val(config_dir, parser_args['input_dir'],
+        parser_args['ckpt_dir'], output_pred_path,
+        parser_args['suffix'], parser_args['threh'],
+        parser_args['encrypt'])
 
 
 class DINO_TRTInferer:
@@ -251,42 +245,16 @@ class Yolo11_TRTInferer:
             }
 
         return output
-
-
-def val(args_path, onnx_path, output_pred_path: Path = None, output_label_path: Path = None, encrypt=False):
+    
+    
+def val(args_path, data_dir, onnx_path, output_pred_path: Path = None, suffix='', threh: float = 0.4, encrypt=False):
     if output_pred_path is not None:
         output_pred_path.mkdir(parents=True, exist_ok=True)
-    if output_label_path is not None:
-        output_label_path.mkdir(parents=True, exist_ok=True)
+    else:
+        raise ValueError('output_pred_path is None')
 
     args = OmegaConf.load(args_path)
 
-    ano_root = args.data.ano_root
-    image_root = args.data.image_root
-    item_list = []
-    for ano_path in (Path(ano_root) / 'val2017').glob('*'):
-        image_path = Path(image_root) / 'val2017' / (ano_path.stem + '.png')
-        if not image_path.exists():
-            continue
-        _ano = np.loadtxt(ano_path, dtype=np.float32)
-
-        if len(_ano) == 0:
-            continue
-        else:
-            if len(_ano.shape) == 1:
-                _ano = _ano[None]
-            _ano = [_ano[:, 0].astype(int), _ano[:, 1:]]
-        _item = {'image_path': image_path, 'annotation': _ano}
-        item_list.append(_item)
-    logger.info(f'find {len(item_list)} images')
-
-    map_metric = MeanAveragePrecision(
-        box_format="xyxy",  # 边界框格式：左上右下坐标
-        iou_type="bbox",  # 计算边界框IoU
-        class_metrics=True,  # 计算每个类别的指标
-        extended_summary=False,  # 启用详细数据（包含精确率/召回率）
-        backend="faster_coco_eval"  # 使用 faster_coco_eval 后端
-    )
     if args.model._target_ == 'litdetect.model.faster_rcnn.ModuleWrapper':
         INFERER = FasterRCNN_TRTInferer
     elif args.model._target_ == 'litdetect.model.yolo11.ModuleWrapper':
@@ -299,182 +267,70 @@ def val(args_path, onnx_path, output_pred_path: Path = None, output_label_path: 
     normalize_args = args.data.augmentation_val.transforms[-2]
     inferer = INFERER(onnx_path, encrypt, pixel_mean=normalize_args.mean, pixel_std=normalize_args.std)
 
-    for meta in tqdm(item_list):
-        raw_image = Image.open(meta['image_path']).convert('RGB')
-        labels, bboxes = meta['annotation']
-
-        x_size, y_size = raw_image.size
-        bboxes = [xywh2xyxy([i[0] * x_size, i[1] * y_size, i[2] * x_size, i[3] * y_size]) for i in bboxes]
-
-        image, scale_params = letterbox(raw_image, args.data.input_size_hw[::-1], 0)
-        bboxes = [apply_scale_to_coords(bbox, scale_params, 'xyxy') for bbox in bboxes]
-        target = {
-            'boxes': torch.tensor(bboxes).float(),
-            'labels': torch.tensor(labels).int(),
-        }
-
+    pic_paths = list(Path(data_dir).rglob(f'*{suffix}'))
+    for pic_path in tqdm(pic_paths):
+        image = Image.open(pic_path).convert('RGB')
+        image, scale_params = letterbox(image, args.data.input_size_hw[::-1], 0)
         image = np.transpose(image, (2, 0, 1)).astype(np.float32) / 255.
         preds = inferer.inference(image[None], conf_threshold=0.05)[0]
-        # print(preds, target)
-        if output_pred_path is not None:
-            _boxes = np.array([recover_original_coords(i, scale_params, 'xyxy') for i in preds['boxes']])
-            if len(_boxes) == 0:
-                _boxes = np.zeros((0, 4), dtype=np.float32)
-            plot_images(
-                np.array(raw_image),
-                preds['labels'],
-                _boxes,
-                preds['scores'],
-                fname=str(output_pred_path / meta['image_path'].name),
-                names=args.data.class_name,
-                save=True,
-                conf_thres=0.05,
-            )
-
-        if output_label_path is not None:
-            _boxes = np.array([recover_original_coords(i, scale_params, 'xyxy') for i in target['boxes']])
-            plot_images(
-                np.array(raw_image),
-                np.array(target['labels']),
-                _boxes,
-                fname=str(output_label_path / meta['image_path'].name),
-                names=args.data.class_name,
-                save=True,
-            )
-
-        preds = {k: torch.tensor(v) for k, v in preds.items()}
-
-        map_metric.update([preds], [target])
-
-    map_res = map_metric.compute()
-    logger.info(map_res)
-    # import pickle
-    # with open(f'onnx.pkl', 'wb')as f:
-    #     data = (map_metric.detection_labels,
-    #             map_metric.detection_box,
-    #             map_metric.detection_scores,
-    #             map_metric.groundtruth_box)
-    #     pickle.dump(data, f)
+        
+        if len(preds['scores']) > 0:
+            preds = [{
+                "box": recover_original_coords(preds['boxes'][i].tolist(), scale_params, 'xyxy'),
+                "score": float(preds['scores'][i]), "class": args.data.class_name[int(preds['labels'][i])],
+            } for i in range(len(preds['scores'])) if preds['scores'][i] > threh]
+            save_json(pic_path, preds, scale_params['orig_size'], Path(data_dir), output_pred_path)
 
 
-def plot_images(
-    images: np.ndarray,
-    cls: np.ndarray,
-    boxes: np.ndarray = np.zeros((0, 4), dtype=np.float32),
-    confs: Optional[np.ndarray] = None,
-    fname: str = "images.jpg",
-    names: Optional[Dict[int, str]] = None,
-    save: bool = True,
-    conf_thres: float = 0.25,
-) -> Optional[np.ndarray]:
-    if images.max() <= 1:
-        images *= 255
-    pil_img = Image.fromarray(images.astype(np.uint8))
-
-    # 为每个类别生成固定颜色
-    unique_classes = np.unique(cls)
-    color_map = {}
-    for c in unique_classes:
-        # 使用HSV颜色空间生成可区分颜色
-        hue = (int(c) * 0.618) % 1.0  # 黄金比例确保颜色分布均匀
-        saturation = 0.7 + random.random() * 0.3
-        value = 0.7 + random.random() * 0.3
-        r, g, b = [int(255 * x) for x in colorsys.hsv_to_rgb(hue, saturation, value)]
-        color_map[int(c)] = (r, g, b)
-
-    draw = ImageDraw.Draw(pil_img)
-    font_path = "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc"
-    try:
-        font_size = 20
-        font = ImageFont.truetype(font_path, font_size)
-    except Exception as e:
-        logger.warning(f"Failed to load font {font_path}: {e}, using default font.")
-        font = ImageFont.load_default()
-
-    for i, box in enumerate(boxes):
-        if confs is not None and confs[i] < conf_thres:
-            continue
-
-        c = int(cls[i])
-        class_name = names.get(c, str(c)) if names else str(c)
-
-        # 添加置信度（如果有）
-        label = f"{class_name} {confs[i]:.2f}" if confs is not None else class_name
-
-        color = color_map.get(c, (0, 0, 255))  # 使用固定颜色
-
-        x1, y1, x2, y2 = map(int, box[:4])
-
-        # 绘制边界框
-        draw.rectangle([x1, y1, x2, y2], outline=color, width=2)
-
-        # 计算文本大小
-        text_bbox = draw.textbbox((0, 0), label, font=font)
-        text_w = text_bbox[2] - text_bbox[0]
-        text_h = text_bbox[3] - text_bbox[1]
-
-        text_y = y1 - text_h - 5
-
-        # 绘制文本背景
-        draw.rectangle(
-            [x1, text_y, x1 + text_w, text_y + text_h + 5],
-            fill=color
-        )
-
-        # 绘制文本
-        draw.text(
-            (x1, text_y),
-            label,
-            fill=(255, 255, 255),
-            font=font
-        )
-
-    # 保存或返回结果
-    if not save:
-        return np.array(pil_img)
-
-    pil_img.save(fname)
-    return None
-
-
-def xyxy2xywh(
-    bbox: Union[List[float], tuple]
-) -> List[float]:
+# 保存结果为JSON格式
+def save_json(image_path, preds, orig_shape, input_dir: Path, output_dir: Path):
     """
-    将边界框坐标从 xyxy 格式 (x1, y1, x2, y2) 转换为 xywh 格式 (cx, cy, w, h)
-
-    Args:
-        bbox: 长度为4的列表或元组，表示 [x1, y1, x2, y2]
-
-    Returns:
-        转换后的 [cx, cy, w, h]
+    保存预测结果为JSON文件
+    :param image_path: 图像路径
+    :param preds: 预测结果
+    :param orig_shape: 原始图像尺寸
+    :param input_dir: 输入目录
+    :param output_dir: 输出目录
     """
-    x1, y1, x2, y2 = map(float, bbox)
-    cx = (x1 + x2) / 2
-    cy = (y1 + y2) / 2
-    w = x2 - x1
-    h = y2 - y1
-    return [cx, cy, w, h]
+    json_data = {
+        "version": "0.1.0",
+        "flags": {},
+        "shapes": [],
+        "imagePath": image_path.name,
+        "imageData": None,
+        "imageHeight": orig_shape[1],
+        "imageWidth": orig_shape[0],
+        "description": ""
+    }
 
+    for pred in preds:
+        x1, y1, x2, y2 = pred['box']
+        points = [
+            [x1, y1],
+            [x2, y1],
+            [x2, y2],
+            [x1, y2]
+        ]
 
-def xywh2xyxy(
-    bbox: Union[List[float], tuple]
-) -> List[float]:
-    """
-    将边界框坐标从 xywh 格式 (cx, cy, w, h) 转换为 xyxy 格式 (x1, y1, x2, y2)
+        shape_info = {
+            "label": pred['class'],
+            "score": float(pred['score']),
+            "points": points,
+            "group_id": None,
+            "description": "",
+            "difficult": False,
+            "shape_type": "rectangle",
+            "flags": {},
+            "attributes": {},
+            "kie_linking": []
+        }
+        json_data["shapes"].append(shape_info)
 
-    Args:
-        bbox: 长度为4的列表或元组，表示 [cx, cy, w, h]
-
-    Returns:
-        转换后的 [x1, y1, x2, y2]
-    """
-    cx, cy, w, h = map(float, bbox)
-    x1 = cx - w / 2
-    y1 = cy - h / 2
-    x2 = cx + w / 2
-    y2 = cy + h / 2
-    return [x1, y1, x2, y2]
+    json_save_path = output_dir / image_path.relative_to(input_dir).with_suffix(".json")
+    json_save_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(json_save_path, 'w', encoding='utf-8') as f:
+        # noinspection PyTypeChecker
+        json.dump(json_data, f, indent=4, ensure_ascii=False)
 
 
 def letterbox(image, target_size, fill=128):
@@ -500,7 +356,7 @@ def letterbox(image, target_size, fill=128):
     new_h = int(orig_h * ratio)
 
     # 缩放图像
-    image = copy.deepcopy(image).resize((new_w, new_h), Image.Resampling.BILINEAR)
+    image = image.resize((new_w, new_h), Image.Resampling.BILINEAR)
 
     # 创建新图像并填充
     new_image = Image.new('RGB', (target_w, target_h), (fill, fill, fill))
@@ -515,71 +371,6 @@ def letterbox(image, target_size, fill=128):
                 'orig_size': (orig_w, orig_h),
                 'target_size': (target_w, target_h)
             })
-
-
-def apply_scale_to_coords(
-    bbox: Union[List[float], torch.Tensor, np.ndarray],
-    scale_params: Dict[str, Union[float, Tuple[float, float], Tuple[int, int]]],
-    box_format: str = 'xyxy'
-) -> List[float]:
-    """
-    将边界框坐标从原始图像映射到缩放+填充后的图像空间
-
-    Args:
-        bbox: 边界框坐标，格式由 box_format 指定
-        scale_params: 包含缩放信息的字典，必须包含:
-            'ratio': 缩放比例 (float)
-            'pad': (left, top) 填充偏移量 (Tuple[float, float])
-            'target_size': (target_w, target_h) 缩放+填充后的图像尺寸 (Tuple[int, int])
-        box_format: 边界框格式，'xyxy' 或 'xywh'
-
-    Returns:
-        缩放+填充后图像上的边界框坐标（与输入相同的格式）
-
-    Raises:
-        ValueError: 当 box_format 不是 'xyxy' 或 'xywh' 时
-    """
-    # 参数验证
-    if box_format not in ('xyxy', 'xywh'):
-        raise ValueError(f"Invalid box_format: '{box_format}'. Must be 'xyxy' or 'xywh'")
-
-    # 解包参数并类型转换
-    ratio = float(scale_params['ratio'])
-    pad_left, pad_top = map(float, scale_params['pad'])
-    target_w, target_h = map(int, scale_params['target_size'])
-
-    # 转换为numpy数组处理
-    if torch.is_tensor(bbox):
-        bbox = bbox.cpu().numpy()
-    bbox = np.asarray(bbox, dtype=np.float32).tolist()
-
-    if box_format == 'xyxy':
-        x1, y1, x2, y2 = bbox
-    else:  # xywh
-        cx, cy, w, h = bbox
-        x1, y1 = cx - w / 2, cy - h / 2
-        x2, y2 = cx + w / 2, cy + h / 2
-
-    # 应用缩放和填充
-    def _convert(_val: float, pad: float, limit: float) -> float:
-        """先缩放再添加填充，并限制在 [0, limit] 范围内"""
-        return max(0.0, min(_val * ratio + pad, limit))
-
-    x1_scaled = _convert(x1, pad_left, target_w)
-    y1_scaled = _convert(y1, pad_top, target_h)
-    x2_scaled = _convert(x2, pad_left, target_w)
-    y2_scaled = _convert(y2, pad_top, target_h)
-
-    # 返回与输入相同的格式
-    if box_format == 'xyxy':
-        return [x1_scaled, y1_scaled, x2_scaled, y2_scaled]
-    else:
-        return [
-            (x1_scaled + x2_scaled) / 2,  # cx
-            (y1_scaled + y2_scaled) / 2,  # cy
-            x2_scaled - x1_scaled,        # w
-            y2_scaled - y1_scaled         # h
-        ]
 
 
 def recover_original_coords(
@@ -626,9 +417,9 @@ def recover_original_coords(
         x2, y2 = cx + w / 2, cy + h / 2
 
     # 去除填充并反缩放
-    def _convert(_val: float, pad: float, limit: float) -> float:
+    def _convert(_val: float, _pad: float, _limit: float) -> float:
         """去除填充后反缩放，并限制在 [0, limit] 范围内"""
-        return max(0.0, min((_val - pad) / ratio, limit))
+        return max(0.0, min((_val - _pad) / ratio, _limit))
 
     x1_orig = _convert(x1, pad_left, orig_w)
     y1_orig = _convert(y1, pad_top, orig_h)
@@ -647,19 +438,6 @@ def recover_original_coords(
         ]
 
 
-def concat_pred_gt_images(output_pred_path: Path, output_label_path: Path, final_path: Path):
-    final_path.mkdir(parents=True, exist_ok=True)
-    pred_images_path = list(output_pred_path.glob('*.png'))
-
-    for pred_image_path in tqdm(pred_images_path):
-        gt_image_path = output_label_path / pred_image_path.name
-        assert gt_image_path.exists()
-        concat_image = np.concatenate([
-            np.array(Image.open(pred_image_path)),
-            np.array(Image.open(gt_image_path))
-        ], axis=1)
-        Image.fromarray(concat_image).save(final_path / pred_image_path.name)
-
-
+# 程序入口
 if __name__ == '__main__':
     main()

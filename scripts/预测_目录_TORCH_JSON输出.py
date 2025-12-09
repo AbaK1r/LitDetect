@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 
+import hydra
 import numpy as np
 import torch
 from PIL import Image
@@ -10,7 +11,6 @@ from omegaconf import OmegaConf
 from tqdm import tqdm
 
 from litdetect.data.scale_tookits import letterbox, recover_original_coords
-from litdetect.model import ModuleInterface
 from litdetect.scripts_init import get_logger, check_path, check_version
 
 # 初始化日志记录器
@@ -49,12 +49,12 @@ def main():
     image_suffix = parser_args['suffix']
     threh = parser_args['threh']
     ddir = Path(f'lightning_logs/version_{parser_args['versions']}/ckpts/')
-    args = OmegaConf.load(ddir.parent / 'hparams.yaml')
-    args.val_batch_size = 1
-    args.pretrained = False
+    args = OmegaConf.load(ddir.parent / 'full_config.yaml')
+    args.data.val_batch_size = 1
+    # args.pretrained = False
 
     # 输出目录设置
-    output_dir = data_dir.parent / f'{args.model_name}_pred' if parser_args['output_dir'] == '' else Path(parser_args['output_dir'])
+    output_dir = data_dir.parent / f'{args.model.model_name}_pred' if parser_args['output_dir'] == '' else Path(parser_args['output_dir'])
     output_dir.mkdir(exist_ok=True, parents=True)
     logger.info(f'Output dir: {output_dir}')
 
@@ -64,38 +64,51 @@ def main():
     ckpts.sort(key=lambda x: x[0])
     if len(ckpts) == 0:
         raise ValueError(f'No ckpt found in {ddir}')
-    ckpt = ckpts[-1][1] if args.call_back_mode == 'max' else ckpts[0][1]
+    ckpt = ckpts[-1][1] if args.callbacks.call_back_mode == 'max' else ckpts[0][1]
     logger.info(f'Load ckpt: {ckpt}')
-    model = ModuleInterface.load_from_checkpoint(
-        checkpoint_path=ckpt, map_location='cpu', strict=True, **args).model.eval().cuda()
+    # model = ModuleInterface.load_from_checkpoint(
+    #     checkpoint_path=ckpt, map_location='cpu', strict=True, **args).model.eval().cuda()
+    model = hydra.utils.instantiate(args.model).eval().cuda()
+    sd = torch.load(ckpt, weights_only=False, map_location='cpu')['state_dict']
+    model.load_state_dict(sd, strict=False)
+
+    normalize_args = args.data.augmentation_val.transforms[-2]
+    pixel_mean = np.array(normalize_args.mean, dtype=np.float32)[:, None, None]
+    pixel_std = np.array(normalize_args.std, dtype=np.float32)[:, None, None]
 
     # 推理过程
     with torch.no_grad():
         pic_paths = list(data_dir.rglob(f'*.{image_suffix}'))
         for pic_path in tqdm(pic_paths):
-            pic, scale_params = preprocess(pic_path, args.input_size)
-            preds = model.val_step([[pic]])[0]
+            pic, scale_params = preprocess(pic_path, args.data.input_size_hw[::-1], pixel_mean, pixel_std)
+            batch = [{'image': pic}]
+            preds = model.model.val_step(batch if not hasattr(model, 'input_batch_trans') else model.input_batch_trans(batch))[0]
             if preds.shape[0] > 0:
                 preds = preds.cpu().tolist()
                 preds = [{
                     "box": recover_original_coords(i[:4], scale_params, 'xyxy'),
-                    "score": i[4], "class": args.class_name[int(i[5])],
+                    "score": i[4], "class": args.data.class_name[int(i[5])],
                 } for i in preds if i[4] >= threh]
                 save_json(pic_path, preds, scale_params['orig_size'], data_dir, output_dir)
-                # break
 
 # 预处理函数，将图像转换为模型输入格式
-def preprocess(pic_path, input_size):
+def preprocess(pic_path, input_size, pixel_mean, pixel_std):
     """
     图像预处理
     :param pic_path: 图像路径
     :param input_size: 输入尺寸
+    :param pixel_mean: 像素均值
+    :param pixel_std: 像素标准差
+
     :return: 预处理后的图像和缩放参数
     """
     image = Image.open(pic_path).convert('RGB')
     image, scale_params = letterbox(image, input_size, 0)
     image = np.array(image, dtype=np.float32) / 255.0
     image = np.transpose(image, (2, 0, 1))
+
+    image = (image - pixel_mean) / pixel_std
+
     image = torch.from_numpy(image).cuda()
     return image, scale_params
 

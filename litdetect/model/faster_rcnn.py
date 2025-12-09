@@ -25,8 +25,7 @@ class ModuleWrapper(ModuleInterface):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-    @staticmethod
-    def input_batch_trans(batch):
+    def input_batch_trans(self, batch):
         """
 
         Args:
@@ -50,6 +49,8 @@ class ModuleWrapper(ModuleInterface):
                     "labels": i["labels"]
                 } for i in batch
             ]
+        ) if self.training else (
+            [i["image"] for i in batch],
         )
 
 

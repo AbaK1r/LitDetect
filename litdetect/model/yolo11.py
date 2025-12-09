@@ -19,8 +19,7 @@ class ModuleWrapper(ModuleInterface):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-    @staticmethod
-    def input_batch_trans(batch):
+    def input_batch_trans(self, batch):
         """
 
         Args:
@@ -36,11 +35,16 @@ class ModuleWrapper(ModuleInterface):
         Returns:
 
         """
-        device = batch[0]["image"].device
-        w, h = batch[0]["input_size_hw"][1], batch[0]["input_size_hw"][0]
-
         images = [b["image"][None] for b in batch]
         images = torch.cat(images, dim=0)
+
+        if not self.training:
+            return {
+                "img": images
+            }
+
+        device = batch[0]["image"].device
+        w, h = batch[0]["input_size_hw"][1], batch[0]["input_size_hw"][0]
 
         bboxes_list, labels_list, batch_idx_list = [], [], []
 
