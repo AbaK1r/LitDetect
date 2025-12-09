@@ -77,7 +77,7 @@ def copy_code(tensorboard_logger):
         TensorBoardLogger
     :return: None
     """
-    src_dirs = [Path('src'), Path('conf')]
+    src_dirs = [Path('litdetect'), Path('conf')]
     dst_dir = Path(tensorboard_logger.log_dir) / 'code'
     dst_dir.mkdir(parents=True, exist_ok=True)
     copy_code_to_log_dir(src_dirs, dst_dir)

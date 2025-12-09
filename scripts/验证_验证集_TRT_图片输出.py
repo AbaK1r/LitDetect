@@ -50,7 +50,7 @@ def parse_args():
 
 def main():
     parser_args = parse_args()
-    hparams_path = Path(f'lightning_logs/version_{parser_args['versions']}/hparams.yaml')
+    hparams_path = Path(f'lightning_logs/version_{parser_args['versions']}/full_config.yaml')
     if parser_args['output_path'] is None:
         output_pred_path = output_label_path = None
     else:
@@ -63,12 +63,12 @@ def main():
 
 
 class DINO_TRTInferer:
-    def __init__(self, model_path, encrypt):
+    def __init__(self, model_path, encrypt, pixel_mean, pixel_std):
         self.model = simple_trt_infer.simple_model(model_path, False, encrypt)
         self.input_shape = self.model.get_input_shape()
         self.output_shape = self.model.get_output_shape()
-        self.pixel_mean = torch.Tensor([123.675, 116.280, 103.530]).view(3, 1, 1).numpy()
-        self.pixel_std = torch.Tensor([58.395, 57.120, 57.375]).view(3, 1, 1).numpy()
+        self.pixel_mean = torch.Tensor(pixel_mean).view(3, 1, 1).numpy()
+        self.pixel_std = torch.Tensor(pixel_std).view(3, 1, 1).numpy()
 
     def inference(self, ipt, conf_threshold=0.05) -> List[Dict[str, np.ndarray]]:
         ipt = (ipt - self.pixel_mean) / self.pixel_std
@@ -112,12 +112,15 @@ class DINO_TRTInferer:
 
 
 class FasterRCNN_TRTInferer:
-    def __init__(self, model_path, encrypt):
+    def __init__(self, model_path, encrypt, pixel_mean, pixel_std):
         self.model = simple_trt_infer.simple_model(model_path, False, encrypt)
         self.input_shape = self.model.get_input_shape()
         self.output_shape = self.model.get_output_shape()
+        self.pixel_mean = torch.Tensor(pixel_mean).view(3, 1, 1).numpy()
+        self.pixel_std = torch.Tensor(pixel_std).view(3, 1, 1).numpy()
 
     def inference(self, ipt, conf_threshold=0.05, nms_threshold=0.45) -> List[Dict[str, np.ndarray]]:
+        ipt = (ipt - self.pixel_mean) / self.pixel_std
         ipt = np.ascontiguousarray(ipt)
         output = self.model.infer(ipt).astype(np.float32)
         output = self.postprocess(output, conf_threshold, nms_threshold)
@@ -161,12 +164,15 @@ class FasterRCNN_TRTInferer:
 
 
 class Yolo11_TRTInferer:
-    def __init__(self, model_path, encrypt):
+    def __init__(self, model_path, encrypt, pixel_mean, pixel_std):
         self.model = simple_trt_infer.simple_model(model_path, False, encrypt)
         self.input_shape = self.model.get_input_shape()
         self.output_shape = self.model.get_output_shape()
+        self.pixel_mean = torch.Tensor(pixel_mean).view(3, 1, 1).numpy()
+        self.pixel_std = torch.Tensor(pixel_std).view(3, 1, 1).numpy()
 
     def inference(self, ipt, *args, **kwargs) -> List[Dict[str, np.ndarray]]:
+        ipt = (ipt - self.pixel_mean) / self.pixel_std
         ipt = np.ascontiguousarray(ipt)
         output = self.model.infer(ipt).astype(np.float32)
         output = self.postprocess(output, *args, **kwargs)
@@ -255,8 +261,8 @@ def val(args_path, onnx_path, output_pred_path: Path = None, output_label_path: 
 
     args = OmegaConf.load(args_path)
 
-    ano_root = args.ano_root
-    image_root = args.image_root
+    ano_root = args.data.ano_root
+    image_root = args.data.image_root
     item_list = []
     for ano_path in (Path(ano_root) / 'val2017').glob('*'):
         image_path = Path(image_root) / 'val2017' / (ano_path.stem + '.png')
@@ -279,18 +285,19 @@ def val(args_path, onnx_path, output_pred_path: Path = None, output_label_path: 
         iou_type="bbox",  # 计算边界框IoU
         class_metrics=True,  # 计算每个类别的指标
         extended_summary=False,  # 启用详细数据（包含精确率/召回率）
-        backend="pycocotools"  # 使用pycocotools后端
+        backend="faster_coco_eval"  # 使用 faster_coco_eval 后端
     )
-    if args.model_name == 'faster_rcnn':
+    if args.model._target_ == 'litdetect.model.faster_rcnn.ModuleWrapper':
         INFERER = FasterRCNN_TRTInferer
-    elif args.model_name == 'yolo11':
+    elif args.model._target_ == 'litdetect.model.yolo11.ModuleWrapper':
         INFERER = Yolo11_TRTInferer
-    elif args.model_name == 'detr_module':
+    elif args.model._target_ == 'litdetect.model.detr_module.ModuleWrapper':
         INFERER = DINO_TRTInferer
     else:
-        raise ValueError(f'model_name must be faster_rcnn or yolo11, but got {args.model_name}')
+        raise ValueError(f'model must be faster_rcnn or yolo11 or detr, but got {args.model._target_}')
 
-    inferer = INFERER(onnx_path, encrypt)
+    normalize_args = args.data.augmentation_val.transforms[-2]
+    inferer = INFERER(onnx_path, encrypt, pixel_mean=normalize_args.mean, pixel_std=normalize_args.std)
 
     for meta in tqdm(item_list):
         raw_image = Image.open(meta['image_path']).convert('RGB')
@@ -299,16 +306,14 @@ def val(args_path, onnx_path, output_pred_path: Path = None, output_label_path: 
         x_size, y_size = raw_image.size
         bboxes = [xywh2xyxy([i[0] * x_size, i[1] * y_size, i[2] * x_size, i[3] * y_size]) for i in bboxes]
 
-        image, scale_params = letterbox(raw_image, args.input_size_hw[::-1], 0)
+        image, scale_params = letterbox(raw_image, args.data.input_size_hw[::-1], 0)
         bboxes = [apply_scale_to_coords(bbox, scale_params, 'xyxy') for bbox in bboxes]
         target = {
             'boxes': torch.tensor(bboxes).float(),
             'labels': torch.tensor(labels).int(),
         }
 
-        image = np.transpose(image, (2, 0, 1)).astype(np.float32)
-        if not args.model_name == 'detr_module':
-            image = image / 255.
+        image = np.transpose(image, (2, 0, 1)).astype(np.float32) / 255.
         preds = inferer.inference(image[None], conf_threshold=0.05)[0]
         # print(preds, target)
         if output_pred_path is not None:
@@ -321,7 +326,7 @@ def val(args_path, onnx_path, output_pred_path: Path = None, output_label_path: 
                 _boxes,
                 preds['scores'],
                 fname=str(output_pred_path / meta['image_path'].name),
-                names=args.class_name,
+                names=args.data.class_name,
                 save=True,
                 conf_thres=0.05,
             )
@@ -333,7 +338,7 @@ def val(args_path, onnx_path, output_pred_path: Path = None, output_label_path: 
                 np.array(target['labels']),
                 _boxes,
                 fname=str(output_label_path / meta['image_path'].name),
-                names=args.class_name,
+                names=args.data.class_name,
                 save=True,
             )
 

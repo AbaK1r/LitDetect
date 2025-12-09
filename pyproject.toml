@@ -46,10 +46,11 @@ dependencies = [
     "torchmetrics>=1.7.3",
     "torchvision>=0.22.1",
     "transformers>=4.55.2",
+    "faster-coco-eval>=1.6.7",
+    "wcwidth>=0.2.13",
     "onnxruntime>=1.22.0",
     "onnxruntime-gpu>=1.22.0",
     "onnxsim>=0.4.36",
-    "faster-coco-eval>=1.6.7"
 ]
 
 

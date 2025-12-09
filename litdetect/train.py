@@ -36,7 +36,7 @@ def main(cfg: DictConfig):
     continue_train_ckpt_path: str = cfg.csdp
     load_state_dict_ckpt_path: str = cfg.sdp
     if continue_train_ckpt_path is None and load_state_dict_ckpt_path is not None:
-        sd = torch.load(load_state_dict_ckpt_path, weights_only=False)['state_dict']
+        sd = torch.load(load_state_dict_ckpt_path, weights_only=False, map_location='cpu')['state_dict']
         model.load_state_dict(sd, strict=False)
         logger.info(f"load state dict from {load_state_dict_ckpt_path}")
 

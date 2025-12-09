@@ -1,12 +1,13 @@
 import argparse
 from pathlib import Path
 
+import hydra
 import onnx
 import onnxsim
+import pytorch_lightning as pl
 import torch
 from omegaconf import OmegaConf
 
-from litdetect.model import ModuleInterface
 from litdetect.scripts_init import get_logger, check_path, check_version
 
 # 初始化日志记录器
@@ -94,8 +95,8 @@ def main():
     logger.info(f"use_cuda: {use_cuda}")
     ddir = Path(f'lightning_logs/version_{version}/ckpts/')
     # 加载配置参数
-    args = OmegaConf.load(ddir.parent / 'hparams.yaml')
-    args.pretrained = False
+    args = OmegaConf.load(ddir.parent / 'full_config.yaml')
+    # args.pretrained = False
 
     # 加载检查点文件
     ckpts = ddir.rglob('*.ckpt')
@@ -104,14 +105,17 @@ def main():
     if len(ckpts) == 0:
         raise ValueError(f'No ckpt found in {ddir}')
     # 根据回调模式选择最佳检查点
-    ckpt = ckpts[-1][1] if args.call_back_mode == 'max' else ckpts[0][1]
+    ckpt = ckpts[-1][1] if args.callbacks.call_back_mode == 'max' else ckpts[0][1]
     logger.info(f'Load ckpt: {ckpt}')
 
     # 加载模型和数据集
-    model = ModuleInterface.load_from_checkpoint(checkpoint_path=ckpt, map_location='cpu', **args).eval()
+    model: pl.LightningModule = hydra.utils.instantiate(args.model).eval()
+    sd = torch.load(ckpt, weights_only=False, map_location='cpu')['state_dict']
+    model.load_state_dict(sd, strict=False)
+    # model = ModuleInterface.load_from_checkpoint(checkpoint_path=ckpt, map_location='cpu', **args).eval()
     if use_cuda:
         model.cuda()
-    export_onnx(ckpt, model, input_shape=(batchsize, 3, *args.input_size_hw), dynamic=dynamic, use_cuda=use_cuda)
+    export_onnx(ckpt, model, input_shape=(batchsize, 3, *args.data.input_size_hw), dynamic=dynamic, use_cuda=use_cuda)
 
 
 if __name__ == '__main__':

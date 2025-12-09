@@ -14,6 +14,11 @@ cd LitDetect
 
 # 使用 uv 安装依赖
 uv sync
+
+# 安装 detrex 依赖
+git submodule update --init --recursive
+uv pip install -e ./third_party/detrex/detectron2/ --no-build-isolation
+uv pip install -e ./third_party/detrex/ --no-build-isolation
 ``` 
 
 uv.lock 文件中已经定义了 litdetect 包为可编辑安装，这意味着您可以直接在开发环境中修改代码。
@@ -36,6 +41,10 @@ cd LitDetect
 # 安装项目依赖
 pip install -e .
 
+# 安装 detrex 依赖
+git submodule update --init --recursive
+pip install -e ./third_party/detrex/detectron2/ --no-build-isolation
+pip install -e ./third_party/detrex/ --no-build-isolation
 ```
 </details>
 
@@ -49,11 +58,12 @@ litdetect-train --help
 
 # 或者测试 Python 导入
 python -c "import litdetect; print('LitDetect installed successfully')"
+python -c "import detrex; print('detrex installed successfully')"
 ```
 
 #### Notes
 
-推荐使用 uv，因为项目已经包含了完整的 uv.lock 文件，可以确保依赖版本的一致性。
+推荐使用 uv，确保依赖版本的一致性。
 
 ---
 
@@ -102,16 +112,6 @@ ano_root: /path/to/annotations
 image_root: /path/to/images
 ```
 
----
-
-### 生成缓存文件
-```bash
-# 基础生成
-litdetect-cache
-
-# 指定参数生成
-litdetect-cache ds@run=your_dataset
-```
 
 ---
 
@@ -124,45 +124,38 @@ litdetect-cache ds@run=your_dataset
 litdetect-train
 
 # 指定参数训练
-litdetect-train trainer=ddp ds@run=your_dataset md@run=yolo11
+litdetect-train trainer=ddp ds@data=your_dataset md@_global_=yolo11
+
+# 如果用 uv
+uv run litdetect-train trainer=ddp ds@data=your_dataset md@_global_=yolo11
 ```
 
 当然，也可以在 `conf/config.yaml` 中修改训练参数：
 
 ```yaml
 defaults:
-    - _self_
-    - trainer: si
-    - md@run: frcnn
-    - ds@run: your_dataset
+  - _self_
+  - base
+  - trainer: si
+  - md@_global_: dino
+  - ds@data: nodule_big2
 ```
 
-修改md@run或ds@run后，hydra会自动从md或ds文件夹加载对应的配置文件。
+修改md@_global_或ds@data后，hydra会自动从md或ds文件夹加载对应的配置文件。
 
 后加入的配置文件会覆盖配置前面的配置文件，比如说在ds加入
 
 ```yaml
-input_size:
+input_size_hw:
     - 512
     - 512
 ```
-就会覆盖md@run中的input_size。
+就会覆盖md@_global_中的input_size。
 
 ```trainer```有三个默认选项：
 - si: 单机单卡训练
 - ddp: 单机多卡训练
 - dev: 测试模式，单机单卡测试
-
-```run```下关于```dataset```选项：
-```yaml
-run:
-    dataset: cache_yolo
-    cache_mode: disk
-```
-cache_mode: 缓存模式
-- ```disk```为磁盘缓存会生成h5文件，在训练时读取；
-- ```ram```为内存缓存，会在训练前就把h5文件全载到内存中，训练时直接从内存中读取;
-- ```disable```为不缓存，训练时从原始数据中读取。
 
 关于配置文件构造和重载，详见 [Hydra](https://hydra.cc/docs/intro/)
 
@@ -193,12 +186,12 @@ python scripts/验证_验证集_ONNX_图片输出.py -v 79 -i xxx.onnx
 其他参数自己去看文件里的 parser
 ### 进阶
 
-在后台静默训练：
+~~在后台静默训练~~：(不推荐nohup，建议使用tmux)
 ```bash
 nohup litdetect-train trainer.enable_progress_bar=false > train.log 2>&1 &
 ```
 
-查看训练进度：
+~~查看训练进度~~：(不推荐nohup，建议使用tmux)
 ```bash
 tail train.log -f
  ```
@@ -209,7 +202,7 @@ tensorboard --logdir lightning_logs
 
 multirun 训练多个模型：
 ```bash
-litdetect-train -m md@run=yolo11,frcnn trainer=ddp ds@run=ds1,ds2,ds3
+litdetect-train -m md@_global_=yolo11,frcnn trainer=ddp ds@data=ds1,ds2,ds3
 ```
 
 如果要用frcnn_dinov3，得去[DINOv3](https://github.com/facebookresearch/dinov3)下载权重
