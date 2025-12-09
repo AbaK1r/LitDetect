@@ -156,8 +156,8 @@ class FasterRCNN_TRTInferer:
                 bboxes, scores, classes = bboxes[None], scores[None], classes[None]
             outputs.append({
                 'boxes': bboxes,  # (N, 4) xyxy
-                'scores': scores,  # (N,)
-                'labels': classes,  # (N,)
+                'scores': scores,  # (N, 1)
+                'labels': classes,  # (N, 1)
             })
 
         return outputs
@@ -246,8 +246,8 @@ class Yolo11_TRTInferer:
 
             output[xi] = {
                 'boxes': x[:, :4],  # (N, 4) xyxy
-                'scores': x[:, 4],  # (N,)
-                'labels': np.round(x[:, 5]).astype(np.int64),  # (N,)
+                'scores': x[:, 4],  # (N, 1)
+                'labels': np.round(x[:, 5]).astype(np.int64),  # (N, 1)
             }
 
         return output
