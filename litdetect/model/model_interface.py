@@ -41,7 +41,7 @@ class ModuleInterface(pl.LightningModule, ABC):
         log_dict = self.model.train_step(batch if not hasattr(self, 'input_batch_trans') else self.input_batch_trans(batch))
         log_dict = {(k.replace('loss_', 'loss/') if k.startswith('loss_') else k): v
                     for k, v in log_dict.items()}
-        self.log_dict(log_dict, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True, batch_size=len(batch))
+        self.log_dict(log_dict, on_step=True, prog_bar=True, sync_dist=True, batch_size=len(batch))
         return log_dict
 
     def validation_step(self, batch, batch_idx) -> Dict[str, List[Dict[str, torch.Tensor]]]:
