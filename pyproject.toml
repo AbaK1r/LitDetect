@@ -7,7 +7,7 @@ name = "litdetect"
 version = "0.1.0"
 description = "deeplearning framework for object detection using PyTorch Lightning"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = { file = "LICENSE" }
 keywords = ["detection", "YOLO", "PyTorch", "object-detection"]
 authors = [
@@ -23,7 +23,6 @@ classifiers = [
   "License :: OSI Approved :: MIT License",
   "Programming Language :: Python",
   "Programming Language :: Python :: 3 :: Only",
-  "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Topic :: Scientific/Engineering :: Artificial Intelligence",
