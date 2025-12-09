@@ -13,7 +13,7 @@ class MetricCallback(pl.Callback):
                 box_format="xyxy",
                 iou_type="bbox",
                 class_metrics=False,
-                backend="pycocotools"
+                backend="faster_coco_eval"
             )
 
     def on_validation_batch_end(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx=0):

@@ -1,6 +1,6 @@
+import logging
 import os
 from pathlib import Path
-import logging
 
 from pytorch_lightning.utilities import rank_zero_only
 
