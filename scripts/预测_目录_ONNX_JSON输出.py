@@ -65,8 +65,8 @@ class DINO_OnnxInferer:
         self.output_name = self.model.get_outputs()[0].name
         self.input_shape = self.model.get_inputs()[0].shape
         self.output_shape = self.model.get_outputs()[0].shape
-        self.pixel_mean = torch.Tensor(pixel_mean).view(3, 1, 1).numpy()
-        self.pixel_std = torch.Tensor(pixel_std).view(3, 1, 1).numpy()
+        self.pixel_mean = np.array(pixel_mean)[:, None, None]
+        self.pixel_std = np.array(pixel_std)[:, None, None]
 
     def inference(self, ipt, conf_threshold=0.05) -> List[Dict[str, np.ndarray]]:
         ipt = (ipt - self.pixel_mean) / self.pixel_std
@@ -120,8 +120,8 @@ class FasterRCNN_OnnxInferer:
         self.output_name = self.model.get_outputs()[0].name
         self.input_shape = self.model.get_inputs()[0].shape
         self.output_shape = self.model.get_outputs()[0].shape
-        self.pixel_mean = torch.Tensor(pixel_mean).view(3, 1, 1).numpy()
-        self.pixel_std = torch.Tensor(pixel_std).view(3, 1, 1).numpy()
+        self.pixel_mean = np.array(pixel_mean)[:, None, None]
+        self.pixel_std = np.array(pixel_std)[:, None, None]
 
     def inference(self, ipt, conf_threshold=0.05, nms_threshold=0.45) -> List[Dict[str, np.ndarray]]:
         ipt = (ipt - self.pixel_mean) / self.pixel_std
@@ -177,8 +177,8 @@ class Yolo11_OnnxInferer:
         self.output_name = self.model.get_outputs()[0].name
         self.input_shape = self.model.get_inputs()[0].shape
         self.output_shape = self.model.get_outputs()[0].shape
-        self.pixel_mean = torch.Tensor(pixel_mean).view(3, 1, 1).numpy()
-        self.pixel_std = torch.Tensor(pixel_std).view(3, 1, 1).numpy()
+        self.pixel_mean = np.array(pixel_mean)[:, None, None]
+        self.pixel_std = np.array(pixel_std)[:, None, None]
 
     def inference(self, ipt, *args, **kwargs) -> List[Dict[str, np.ndarray]]:
         ipt = (ipt - self.pixel_mean) / self.pixel_std
