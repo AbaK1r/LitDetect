@@ -61,8 +61,8 @@ class DINO_TRTInferer:
         self.model = simple_trt_infer.simple_model(model_path, False, encrypt)
         self.input_shape = self.model.get_input_shape()
         self.output_shape = self.model.get_output_shape()
-        self.pixel_mean = np.array(pixel_mean)[:, None, None]
-        self.pixel_std = np.array(pixel_std)[:, None, None]
+        self.pixel_mean = np.array(pixel_mean, dtype=np.float32)[:, None, None]
+        self.pixel_std = np.array(pixel_std, dtype=np.float32)[:, None, None]
 
     def inference(self, ipt, conf_threshold=0.05) -> List[Dict[str, np.ndarray]]:
         ipt = (ipt - self.pixel_mean) / self.pixel_std
@@ -110,8 +110,8 @@ class FasterRCNN_TRTInferer:
         self.model = simple_trt_infer.simple_model(model_path, False, encrypt)
         self.input_shape = self.model.get_input_shape()
         self.output_shape = self.model.get_output_shape()
-        self.pixel_mean = np.array(pixel_mean)[:, None, None]
-        self.pixel_std = np.array(pixel_std)[:, None, None]
+        self.pixel_mean = np.array(pixel_mean, dtype=np.float32)[:, None, None]
+        self.pixel_std = np.array(pixel_std, dtype=np.float32)[:, None, None]
 
     def inference(self, ipt, conf_threshold=0.05, nms_threshold=0.45) -> List[Dict[str, np.ndarray]]:
         ipt = (ipt - self.pixel_mean) / self.pixel_std
@@ -162,8 +162,8 @@ class Yolo11_TRTInferer:
         self.model = simple_trt_infer.simple_model(model_path, False, encrypt)
         self.input_shape = self.model.get_input_shape()
         self.output_shape = self.model.get_output_shape()
-        self.pixel_mean = np.array(pixel_mean)[:, None, None]
-        self.pixel_std = np.array(pixel_std)[:, None, None]
+        self.pixel_mean = np.array(pixel_mean, dtype=np.float32)[:, None, None]
+        self.pixel_std = np.array(pixel_std, dtype=np.float32)[:, None, None]
 
     def inference(self, ipt, *args, **kwargs) -> List[Dict[str, np.ndarray]]:
         ipt = (ipt - self.pixel_mean) / self.pixel_std
