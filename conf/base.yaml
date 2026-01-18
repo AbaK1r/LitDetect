@@ -36,12 +36,14 @@ data:
       - _target_: albumentations.LongestMaxSize
         max_size_hw: ${data.input_size_hw}     # 对应 input_size_hw
         area_for_downscale: image
+        p: 1.0
 
       - _target_: albumentations.PadIfNeeded
         min_height: ${data.input_size_hw.0}
         min_width: ${data.input_size_hw.1}
         border_mode: 0     # cv2.BORDER_CONSTANT = 0
         fill: 0
+        p: 1.0
 
       - _target_: albumentations.SquareSymmetry
         p: 0.5
@@ -83,12 +85,14 @@ data:
       - _target_: albumentations.LongestMaxSize
         max_size_hw: ${data.input_size_hw}     # 对应 input_size_hw
         area_for_downscale: image
+        p: 1.0
 
       - _target_: albumentations.PadIfNeeded
         min_height: ${data.input_size_hw.0}
         min_width: ${data.input_size_hw.1}
         border_mode: 0     # cv2.BORDER_CONSTANT = 0
         fill: 0
+        p: 1.0
 
       - _target_: albumentations.Normalize
         mean: [ 0.485, 0.456, 0.406 ]

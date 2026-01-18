@@ -51,6 +51,7 @@ dependencies = [
     "onnxruntime>=1.22.0",
     "onnxruntime-gpu>=1.22.0",
     "onnxsim>=0.4.36",
+    "onnxscript>=0.5.6",
 ]
 
 

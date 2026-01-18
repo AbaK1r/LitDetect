@@ -7,9 +7,7 @@ from pathlib import Path
 from typing import List, Union, Dict, Tuple, Optional
 
 import numpy as np
-import simple_trt_infer
 import torch
-import torchvision
 from PIL import Image, ImageDraw, ImageFont
 from omegaconf import OmegaConf
 from torchmetrics.detection import MeanAveragePrecision
@@ -33,6 +31,7 @@ def parse_args():
     parser.add_argument("-o", "--output_path", type=str, help="保存预测结果的路径，可不填", default='')
     parser.add_argument("-c", "--concat", help="拼接并保存GT和预测的图", action='store_true')
     parser.add_argument("-e", "--encrypt", help="使用加密后的权重", action='store_true')
+    parser.add_argument("-l", "--limit_num_pics", type=float, help="限制验证集图片数量", default=None)
 
     args = vars(parser.parse_args())
     args['output_path'] = None if args['output_path'] == '' else args['output_path']
@@ -40,7 +39,7 @@ def parse_args():
     from litdetect.scripts_init import check_version
     args['versions'] = check_version(args['versions'])
 
-    # TODO: 如果不通过配置参数，则取消注释并使用下面的arg
+    # 如果不通过配置参数，则取消注释并使用下面的arg
     # args = {
     #     'versions': 0,
     #     'ckpt_dir': '/data/16t/wxh/LitDetect/lightning_logs/version_86/ckpts/yolo11-epoch=130-map_50=0.79230_bs_1.onnx'
@@ -56,204 +55,15 @@ def main():
     else:
         output_pred_path = Path(parser_args['output_path']) / 'predictions'
         output_label_path = Path(parser_args['output_path']) / 'labels'
-    val(hparams_path, parser_args['ckpt_dir'], output_pred_path, output_label_path, parser_args['encrypt'])
+
+    val(hparams_path, parser_args['ckpt_dir'], output_pred_path,
+        output_label_path, parser_args['encrypt'], parser_args['limit_num_pics'])
     if parser_args['concat']:
         concat_pred_gt_images(output_pred_path, output_label_path, Path(parser_args['output_path']) / 'concat_images')
 
 
-
-class DINO_TRTInferer:
-    def __init__(self, model_path, encrypt, pixel_mean, pixel_std):
-        self.model = simple_trt_infer.simple_model(model_path, False, encrypt)
-        self.input_shape = self.model.get_input_shape()
-        self.output_shape = self.model.get_output_shape()
-        self.pixel_mean = np.array(pixel_mean, dtype=np.float32)[:, None, None]
-        self.pixel_std = np.array(pixel_std, dtype=np.float32)[:, None, None]
-
-    def inference(self, ipt, conf_threshold=0.05) -> List[Dict[str, np.ndarray]]:
-        ipt = (ipt - self.pixel_mean) / self.pixel_std
-        ipt = np.ascontiguousarray(ipt)
-        output = self.model.infer(ipt).astype(np.float32)
-        output = self.postprocess(output, conf_threshold)
-        return output
-
-    def postprocess(self, outputs: np.ndarray, conf_threshold=0.05):
-        """
-
-        Args:
-            outputs: (B, N, xyxy+score+class)
-            conf_threshold:
-
-        Returns: List[Dict[str, np.ndarray]]
-
-        """
-        bs, n_box, _ = outputs.shape
-        b_bboxes = outputs[..., :4].reshape(bs, -1, 4)
-        b_scores = outputs[..., 4].reshape(bs, -1)
-        b_classes = outputs[..., 5].reshape(bs, -1).astype(np.int64)
-        H, W = self.input_shape[-2:]
-        outputs = []
-        for bboxes, scores, classes in zip(b_bboxes, b_scores, b_classes):
-            inds = np.where(scores > conf_threshold)[0]
-            bboxes, scores, classes = bboxes[inds], scores[inds], classes[inds]
-            if len(bboxes.shape) == 1:
-                bboxes, scores, classes = bboxes[None], scores[None], classes[None]
-            bboxes[:, 0] *= W
-            bboxes[:, 1] *= H
-            bboxes[:, 2] *= W
-            bboxes[:, 3] *= H
-            outputs.append({
-                'boxes': bboxes,  # (N, 4) xyxy
-                'scores': scores,  # (N, 1)
-                'labels': classes,  # (N, 1)
-            })
-
-        return outputs
-
-
-class FasterRCNN_TRTInferer:
-    def __init__(self, model_path, encrypt, pixel_mean, pixel_std):
-        self.model = simple_trt_infer.simple_model(model_path, False, encrypt)
-        self.input_shape = self.model.get_input_shape()
-        self.output_shape = self.model.get_output_shape()
-        self.pixel_mean = np.array(pixel_mean, dtype=np.float32)[:, None, None]
-        self.pixel_std = np.array(pixel_std, dtype=np.float32)[:, None, None]
-
-    def inference(self, ipt, conf_threshold=0.05, nms_threshold=0.45) -> List[Dict[str, np.ndarray]]:
-        ipt = (ipt - self.pixel_mean) / self.pixel_std
-        ipt = np.ascontiguousarray(ipt)
-        output = self.model.infer(ipt).astype(np.float32)
-        output = self.postprocess(output, conf_threshold, nms_threshold)
-        return output
-
-    def postprocess(self, outputs: np.ndarray, conf_threshold=0.05, nms_threshold=0.45):
-        """
-
-        Args:
-            outputs: (B, N, C, 5) xyxy, conf
-            conf_threshold:
-            nms_threshold:
-
-        Returns: List[Dict[str, np.ndarray]]
-
-        """
-        bs, n_box, n_class, _ = outputs.shape
-        b_bboxes = outputs[..., :4].reshape(bs, -1, 4)
-        b_scores = outputs[..., 4].reshape(bs, -1)
-        b_classes = np.tile(np.arange(n_class), (bs, n_box))
-
-        outputs = []
-
-        for bboxes, scores, classes in zip(b_bboxes, b_scores, b_classes):
-            inds = np.where(scores > conf_threshold)[0]
-            bboxes, scores, classes = bboxes[inds], scores[inds], classes[inds]
-
-            c = classes * max(self.input_shape[-2:])
-            nms_idx = torchvision.ops.nms(torch.tensor(bboxes + c[:, None]).float(), torch.tensor(scores).float(), nms_threshold)
-            bboxes, scores, classes = bboxes[nms_idx], scores[nms_idx], classes[nms_idx]
-
-            if len(bboxes.shape) == 1:
-                bboxes, scores, classes = bboxes[None], scores[None], classes[None]
-            outputs.append({
-                'boxes': bboxes,  # (N, 4) xyxy
-                'scores': scores,  # (N, 1)
-                'labels': classes,  # (N, 1)
-            })
-
-        return outputs
-
-
-class Yolo11_TRTInferer:
-    def __init__(self, model_path, encrypt, pixel_mean, pixel_std):
-        self.model = simple_trt_infer.simple_model(model_path, False, encrypt)
-        self.input_shape = self.model.get_input_shape()
-        self.output_shape = self.model.get_output_shape()
-        self.pixel_mean = np.array(pixel_mean, dtype=np.float32)[:, None, None]
-        self.pixel_std = np.array(pixel_std, dtype=np.float32)[:, None, None]
-
-    def inference(self, ipt, *args, **kwargs) -> List[Dict[str, np.ndarray]]:
-        ipt = (ipt - self.pixel_mean) / self.pixel_std
-        ipt = np.ascontiguousarray(ipt)
-        output = self.model.infer(ipt).astype(np.float32)
-        output = self.postprocess(output, *args, **kwargs)
-        return output
-
-    def postprocess(self, outputs: np.ndarray, conf_threshold=0.05, nms_threshold=0.45, classes_filter=None, max_nms=10000, max_det=300):
-        """
-
-        Args:
-            max_det:
-            max_nms:
-            classes_filter:
-            outputs: (B, N, xyxy+scores)
-            conf_threshold:
-            nms_threshold:
-
-        Returns: List[Dict[str, np.ndarray]]
-
-        """
-        bs, n_box, _ = outputs.shape
-        xc = np.amax(outputs[..., 4:], axis=2) > conf_threshold  # candidates
-
-        output = [{
-            'boxes': np.zeros((0, 4)),  # (N, 4) xyxy
-            'scores': np.zeros((0,)),  # (N,)
-            'labels': np.zeros((0,)),  # (N,)
-        }] * bs
-
-        for xi, x in enumerate(outputs):
-            filt = xc[xi]  # confidence
-            x = x[filt]
-
-            # If none remain process next image
-            if not x.shape[0]:
-                continue
-
-            box = x[:, :4]
-            cls = x[:, 4:]
-
-            conf = np.max(cls, axis=1, keepdims=True)
-            j = np.argmax(cls, axis=1, keepdims=True)
-            x = np.concatenate((box, conf, j.astype(x.dtype)), 1)
-
-            if classes_filter is not None:
-                if isinstance(classes_filter, list):
-                    for c in classes_filter:
-                        filt = np.any(x[:, 5:6] == c, axis=1)
-                        x = x[filt]
-                elif isinstance(classes_filter, int):
-                    filt = np.any(x[:, 5:6] == classes_filter, axis=1)
-                    x = x[filt]
-                else:
-                    raise ValueError(f'classes_filter must be list or int, but got {classes_filter}')
-
-            # Check shape
-            n = x.shape[0]  # number of boxes
-            if not n:  # no boxes
-                continue
-
-            if n > max_nms:  # excess boxes
-                filt = np.argsort(-x[:, 4])[:max_nms]
-                x = x[filt]
-
-            c = x[:, 5:6] * max(self.input_shape[-2:])
-            nms_idx = torchvision.ops.nms(torch.tensor(x[:, :4] + c).float(), torch.tensor(x[:, 4]).float(), nms_threshold)
-            nms_idx = nms_idx[:max_det]
-
-            x = x[nms_idx]
-            if len(x.shape) == 1:
-                x = x[None]
-
-            output[xi] = {
-                'boxes': x[:, :4],  # (N, 4) xyxy
-                'scores': x[:, 4],  # (N, 1)
-                'labels': np.round(x[:, 5]).astype(np.int64),  # (N, 1)
-            }
-
-        return output
-
-
-def val(args_path, onnx_path, output_pred_path: Path = None, output_label_path: Path = None, encrypt=False):
+def val(args_path, model_path, output_pred_path: Path = None,
+        output_label_path: Path = None, encrypt=False, limit_num_pics=None):
     if output_pred_path is not None:
         output_pred_path.mkdir(parents=True, exist_ok=True)
     if output_label_path is not None:
@@ -280,6 +90,16 @@ def val(args_path, onnx_path, output_pred_path: Path = None, output_label_path: 
         item_list.append(_item)
     logger.info(f'find {len(item_list)} images')
 
+    if limit_num_pics > 1:
+        limit_num_pics = round(limit_num_pics)
+    elif 0 < limit_num_pics < 1:
+        limit_num_pics = round(len(item_list) * limit_num_pics)
+    else:
+        limit_num_pics = None
+
+    item_list = item_list[:limit_num_pics] if limit_num_pics is not None else item_list
+    logger.info(f'use {len(item_list)} images')
+
     map_metric = MeanAveragePrecision(
         box_format="xyxy",  # 边界框格式：左上右下坐标
         iou_type="bbox",  # 计算边界框IoU
@@ -287,17 +107,13 @@ def val(args_path, onnx_path, output_pred_path: Path = None, output_label_path: 
         extended_summary=False,  # 启用详细数据（包含精确率/召回率）
         backend="faster_coco_eval"  # 使用 faster_coco_eval 后端
     )
-    if args.model._target_ == 'litdetect.model.faster_rcnn.ModuleWrapper':
-        INFERER = FasterRCNN_TRTInferer
-    elif args.model._target_ == 'litdetect.model.yolo11.ModuleWrapper':
-        INFERER = Yolo11_TRTInferer
-    elif args.model._target_ == 'litdetect.model.detr_module.ModuleWrapper':
-        INFERER = DINO_TRTInferer
-    else:
-        raise ValueError(f'model must be faster_rcnn or yolo11 or detr, but got {args.model._target_}')
 
-    normalize_args = args.data.augmentation_val.transforms[-2]
-    inferer = INFERER(onnx_path, encrypt, pixel_mean=normalize_args.mean, pixel_std=normalize_args.std)
+    if str(model_path).endswith('.onnx'):
+        from litdetect.onnx_inferer import get_inferer
+    else:
+        from litdetect.trt_inferer import get_inferer
+
+    inferer = get_inferer(args.model._target_, model_path, encrypt=encrypt)
 
     for meta in tqdm(item_list):
         raw_image = Image.open(meta['image_path']).convert('RGB')
@@ -313,8 +129,8 @@ def val(args_path, onnx_path, output_pred_path: Path = None, output_label_path: 
             'labels': torch.tensor(labels).int(),
         }
 
-        image = np.transpose(image, (2, 0, 1)).astype(np.float32) / 255.
-        preds = inferer.inference(image[None], conf_threshold=0.05)[0]
+        image = np.transpose(image, (2, 0, 1)).astype(np.float32)[None]
+        preds = inferer.inference(image, conf_threshold=0.05)[0]
         # print(preds, target)
         if output_pred_path is not None:
             _boxes = np.array([recover_original_coords(i, scale_params, 'xyxy') for i in preds['boxes']])

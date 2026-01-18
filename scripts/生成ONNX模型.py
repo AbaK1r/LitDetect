@@ -109,7 +109,9 @@ def main():
     logger.info(f'Load ckpt: {ckpt}')
 
     # 加载模型和数据集
-    model: pl.LightningModule = hydra.utils.instantiate(args.model).eval()
+    normalize_args = args.data.augmentation_val.transforms[-2]
+    model: pl.LightningModule = hydra.utils.instantiate(
+        args.model, pixel_mean=normalize_args.mean, pixel_std=normalize_args.std).eval()
     sd = torch.load(ckpt, weights_only=False, map_location='cpu')['state_dict']
     model.load_state_dict(sd, strict=False)
     # model = ModuleInterface.load_from_checkpoint(checkpoint_path=ckpt, map_location='cpu', **args).eval()
