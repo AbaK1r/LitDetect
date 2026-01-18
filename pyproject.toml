@@ -42,7 +42,7 @@ dependencies = [
     "tensorboard>=2.19.0",
     "tensorboardx>=2.6.4",
     "timm>=1.0.15",
-    "torch>=2.7.1",
+    "torch==2.8.0",
     "torchmetrics>=1.7.3",
     "torchvision>=0.22.1",
     "transformers>=4.55.2",
@@ -52,6 +52,7 @@ dependencies = [
     "onnxruntime-gpu>=1.22.0",
     "onnxsim>=0.4.36",
     "onnxscript>=0.5.6",
+    "einops>=0.8.1",
 ]
 
 
