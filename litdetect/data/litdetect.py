@@ -89,11 +89,15 @@ class LitDetectDataset(Dataset):
             for cx, cy, w, h in bboxes_xywh
         ], dtype=np.float32).clip(min=0)
 
-        # Apply transforms (only geometric)
+        # Apply transforms 一般把归一化操作放到模型中，
         transformed = self.transforms(image=image, bboxes=bboxes_xyxy, labels=labels)
-        aug_image = transformed['image'].to(torch.float32)
-        aug_bboxes = torch.as_tensor(transformed['bboxes'], dtype=torch.float32)
-        aug_labels = torch.as_tensor(transformed['labels'], dtype=torch.int64)
+        aug_image = transformed['image']
+        if isinstance(aug_image, torch.Tensor):
+            aug_image = aug_image.to(torch.float32)
+        else:
+            aug_image = torch.tensor(aug_image, dtype=torch.float32)
+        aug_bboxes = torch.tensor(transformed['bboxes'], dtype=torch.float32)
+        aug_labels = torch.tensor(transformed['labels'], dtype=torch.int64)
 
         if len(aug_bboxes) > 0:
             bboxes = aug_bboxes  # (n, 4) (x1, y1, x2, y2)

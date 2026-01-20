@@ -110,6 +110,7 @@ def main():
 
     # 加载模型和数据集
     normalize_args = args.data.augmentation_val.transforms[-2]
+    # 创建模型，注意：归一化放到模型中可以加速推理
     model: pl.LightningModule = hydra.utils.instantiate(
         args.model, pixel_mean=normalize_args.mean, pixel_std=normalize_args.std).eval()
     sd = torch.load(ckpt, weights_only=False, map_location='cpu')['state_dict']

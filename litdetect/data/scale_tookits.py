@@ -1,5 +1,6 @@
 from typing import List, Union, Dict, Tuple
 
+import cv2
 import numpy as np
 import torch
 from PIL import Image
@@ -209,3 +210,94 @@ def recover_original_coords(
             x2_orig - x1_orig,        # w
             y2_orig - y1_orig         # h
         ]
+
+
+def letterbox_array(
+    image: np.ndarray,
+    target_size_hw: Tuple[int, int],
+    fill: int | Tuple = 0):
+    """
+    保持比例缩放图像并在两侧填充指定颜色
+    :param image: numpy.ndarray 输入图像 (H, W, C) 或 (H, W)
+    :param target_size_hw: (height, width) 目标尺寸
+    :param fill: 填充颜色值（单值或通道值）
+    :return:
+        new_image: 缩放并填充后的numpy.ndarray
+        scale_params: 包含缩放信息的字典，必须包含:
+            'ratio': 缩放比例 (float)
+            'pad': (left, top) 填充偏移量，即输出图像中原图左上角位置坐标 (Tuple[float, float])
+            'orig_size': (orig_w, orig_h) 原始的图像尺寸 (Tuple[int, int])
+            'target_size': (target_w, target_h) 缩放+填充后的图像尺寸 (Tuple[int, int])
+    """
+    target_h, target_w = target_size_hw
+
+    # 获取原始图像尺寸
+    if len(image.shape) == 3:
+        orig_h, orig_w = image.shape[:2]
+        channels = image.shape[2]
+    else:
+        orig_h, orig_w = image.shape
+        channels = 1
+
+    # 计算缩放比例和新的尺寸
+    ratio = min(target_w / orig_w, target_h / orig_h)
+    new_w = int(orig_w * ratio)
+    new_h = int(orig_h * ratio)
+
+    # 缩放图像
+    assert new_w > 0 and new_h > 0, f"Invalid target size: {target_size_hw}"
+    # 使用双线性插值
+    resized_img = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+
+    # 创建新图像并填充
+    if channels == 1:
+        assert isinstance(fill, int), f"Invalid fill color: {fill}"
+        new_image = np.full((target_h, target_w), fill, dtype=image.dtype)
+    else:
+        fill = (fill,) * channels if isinstance(fill, int) else fill
+        assert isinstance(fill, (list, tuple)) and len(fill) == channels, f"Invalid fill color: {fill}"
+        new_image = np.full((target_h, target_w, channels), fill, dtype=image.dtype)
+
+    # 计算粘贴位置
+    left_pad = (target_w - new_w) // 2
+    top_pad = (target_h - new_h) // 2
+
+    # 将缩放后的图像粘贴到新图像中
+    if channels == 1:
+        new_image[top_pad:top_pad + new_h, left_pad:left_pad + new_w] = resized_img
+    else:
+        new_image[top_pad:top_pad + new_h, left_pad:left_pad + new_w, :] = resized_img
+
+    return (new_image,
+            {
+                'ratio': ratio,
+                'pad': (left_pad, top_pad),
+                'orig_size': (orig_w, orig_h),
+                'target_size': (target_w, target_h)
+            })
+
+
+if __name__ == "__main__":
+    # 示例1: 三通道图像
+    img_rgb = np.random.randint(0, 255, (300, 400, 3), dtype=np.uint8)
+    result_rgb, params_rgb = letterbox_array(img_rgb, (512, 512), fill=128)
+    print(f"RGB图像 - 原始尺寸: {params_rgb['orig_size']}, 缩放比例: {params_rgb['ratio']:.3f}")
+
+    # 示例2: 单通道图像
+    img_gray = np.random.randint(0, 255, (300, 400), dtype=np.uint8)
+    result_gray, params_gray = letterbox_array(img_gray, (512, 512), fill=128)
+    print(f"灰度图像 - 原始尺寸: {params_gray['orig_size']}, 缩放比例: {params_gray['ratio']:.3f}")
+
+    # 示例3: 使用不同的填充颜色
+    img_bgr = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR)  # 注意：OpenCV默认使用BGR
+    result_bgr, _ = letterbox_array(img_bgr, (512, 512), fill=(0, 255, 0))  # 绿色填充
+
+    import matplotlib.pyplot as plt
+    plt.figure(figsize=(12, 6))
+    plt.subplot(1, 3, 1)
+    plt.imshow(cv2.cvtColor(result_rgb, cv2.COLOR_BGR2RGB))
+    plt.subplot(1, 3, 2)
+    plt.imshow(cv2.cvtColor(result_gray, cv2.COLOR_GRAY2RGB))
+    plt.subplot(1, 3, 3)
+    plt.imshow(cv2.cvtColor(result_bgr, cv2.COLOR_BGR2RGB))
+    plt.show()
