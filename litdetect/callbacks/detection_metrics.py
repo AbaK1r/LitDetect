@@ -125,7 +125,7 @@ class DetectionMetricsCallback(pl.Callback):
             # target: {'boxes': tensor([n, 4]),
             #          'labels': tensor([n, ])}
             n_pred = pred['boxes'].shape[0]
-            n_label = target['boxes'].shape[0]
+            # n_label = target['boxes'].shape[0]
             labels = target['labels']
             image_id = target['image_id'].expand_as(labels)
             stat = dict(
@@ -135,16 +135,16 @@ class DetectionMetricsCallback(pl.Callback):
                 target_cls=torch.stack((labels, image_id), dim=1),
             )
             if n_pred == 0:
-                if n_label:
-                    for k in self.stats.keys():
-                        self.stats[k].append(stat[k])
+                # if n_label:
+                for k in self.stats.keys():
+                    self.stats[k].append(stat[k])
                 continue
             stat["conf"] = pred['scores']
             stat["pred_cls"] = pred['labels']
 
-            if n_label:
-                iou = box_iou(target['boxes'], pred['boxes'])
-                stat["tp"] = self._match_predictions(pred['labels'], target['labels'], iou)
+            # if n_label:
+            iou = box_iou(target['boxes'], pred['boxes'])
+            stat["tp"] = self._match_predictions(pred['labels'], target['labels'], iou)
             for k in self.stats.keys():
                 self.stats[k].append(stat[k])
 

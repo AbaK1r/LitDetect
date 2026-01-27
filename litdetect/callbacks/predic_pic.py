@@ -32,7 +32,7 @@ class PicRecordCallback(pl.Callback):
             data_idx = len(self.data_dic["images"])
             idx = random.choice(range(len(batch)))
             choosed_pred: Dict[str, torch.Tensor] = outputs["preds"][idx]
-            # TODO: 修复采样错误
+
             self.data_dic["images"].append(batch[idx]["image"].cpu().clone()[None])  # 1CHW, float32, [0, 255]
 
             if choosed_pred['boxes'].shape[0] > 0:

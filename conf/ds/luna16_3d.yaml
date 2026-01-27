@@ -1,0 +1,6 @@
+dataset_name: Luna16_3d
+num_classes: 1
+class_name: [ nodules ]
+ano_root: /data/7t/wxh/datasets/Luna16prepare3d/labels
+image_root: /data/7t/wxh/datasets/Luna16prepare3d/images
+input_size_hw: [ 512, 512 ]

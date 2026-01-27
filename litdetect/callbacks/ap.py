@@ -109,6 +109,87 @@ def plot_mc_curve(px, py, save_dir=Path("mc_curve.png"), names={}, xlabel="Confi
         on_plot(save_dir)
 
 
+@plt_settings()
+def plot_froc_curve(
+    fps_per_scan,
+    recalls,
+    save_dir=Path("froc_curve.png"),
+    xlabel="FP per scan",
+    ylabel="Recall",
+    on_plot=None,
+):
+    """
+    Plots a FROC curve (Recall vs FP per scan).
+
+    Args:
+        fps_per_scan (array-like): FP / scan values, shape (K,)
+        recalls (array-like): Recall values, shape (K,)
+        save_dir (Path): Output image path
+    """
+    fps_per_scan = np.asarray(fps_per_scan)
+    recalls = np.asarray(recalls)
+
+    # 确保数据点按FP/scan升序排列
+    order = np.argsort(fps_per_scan)
+    fps_per_scan = fps_per_scan[order]
+    recalls = recalls[order]
+
+    # 处理重复的FP值，取最大recall
+    unique_fp = []
+    unique_recall = []
+    for fp in np.unique(fps_per_scan):
+        mask = fps_per_scan == fp
+        unique_fp.append(fp)
+        unique_recall.append(np.max(recalls[mask]))
+
+    unique_fp = np.array(unique_fp)
+    unique_recall = np.array(unique_recall)
+
+    # 对recall进行累积最大值处理，确保曲线单调非递减
+    cummax_recall = np.maximum.accumulate(unique_recall)
+
+    fig, ax = plt.subplots(1, 1, figsize=(9, 6), tight_layout=True)
+
+    # 绘制FROC曲线
+    ax.plot(
+        unique_fp,
+        cummax_recall,
+        linewidth=2,
+        color='blue',
+        marker='o',
+        markersize=4,
+        label="FROC Curve"
+    )
+
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.set_xlim(left=0, right=21)
+    ax.set_ylim(0, 1)
+    ax.grid(True, linestyle="--", alpha=0.5)
+    ax.set_title("FROC Curve (3D Tumor Level)")
+
+    # 标记关键点
+    if len(unique_fp) > 0:
+        # 找到几个关键FP阈值对应的recall
+        fp_thresholds = [0.125, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0]
+        for fp_thr in fp_thresholds:
+            if fp_thr <= unique_fp[-1]:
+                # 找到最接近的FP值
+                idx = np.searchsorted(unique_fp, fp_thr)
+                if idx < len(cummax_recall):
+                    ax.scatter(unique_fp[idx], cummax_recall[idx],
+                               s=80, c='red', marker='s',
+                               label=f'FP={fp_thr}: R={cummax_recall[idx]:.3f}')
+
+    ax.legend(loc="lower right", fontsize=9)
+
+    fig.savefig(save_dir, dpi=250)
+    plt.close(fig)
+
+    if on_plot:
+        on_plot(save_dir)
+
+
 def compute_ap(recall, precision):
     """
     Compute the average precision (AP) given the recall and precision curves.
@@ -140,6 +221,7 @@ def compute_ap(recall, precision):
     #     ap = np.sum((mrec[i + 1] - mrec[i]) * mpre[i + 1])  # area under curve
 
     return ap, mpre, mrec
+
 
 
 def ap_per_class(

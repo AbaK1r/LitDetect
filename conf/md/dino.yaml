@@ -19,6 +19,7 @@ data:
 
 trainer:
   num_sanity_val_steps: 0
-  gradient_clip_val: 0.2
-  check_val_every_n_epoch: null
-  val_check_interval: 1000
+#  gradient_clip_val: 0.2
+  check_val_every_n_epoch: 5
+#  check_val_every_n_epoch: null
+#  val_check_interval: 500

@@ -13,7 +13,7 @@ from PIL import Image
 
 # 配置路径
 LUNA16_DATA_PATH = Path('/data/4t_hdd/DataSets/xjlDataset/Luna16')
-YOLO_OUTPUT_PATH = Path('/data/7t/wxh/datasets/Luna16prepare2d')
+YOLO_OUTPUT_PATH = Path('/data/7t/wxh/datasets/Luna16prepare3d')
 YOLO_OUTPUT_PATH.mkdir(parents=True, exist_ok=True)
 
 config = {
@@ -207,7 +207,31 @@ def process_case(id, annos, filelist, output_path, split):
         for z, labels  in buffer.items():
             if len(labels) == 0:
                 continue
-            # 保存切片为PNG
+            
+            # 构建伪RGB图像：上一层(z-1)、当前层(z)、下一层(z+1)
+            z_min = 0
+            z_max = resampled_image.shape[2] - 1
+            
+            # 获取上一层切片，边界处理
+            if z - 1 >= z_min:
+                prev_slice = resampled_image[..., z - 1]
+            else:
+                prev_slice = np.zeros_like(resampled_image[..., z])
+            
+            # 获取当前层切片
+            curr_slice = resampled_image[..., z]
+            
+            # 获取下一层切片，边界处理
+            if z + 1 <= z_max:
+                next_slice = resampled_image[..., z + 1]
+            else:
+                next_slice = np.zeros_like(resampled_image[..., z])
+            
+            # 堆叠为RGB三通道图像
+            rgb_image = np.stack([prev_slice, curr_slice, next_slice], axis=2)
+            assert rgb_image.shape == (512, 512, 3) and rgb_image.dtype == np.uint8, f"{rgb_image.shape}, {rgb_image.dtype}"
+            assert rgb_image.min() >= 0 and rgb_image.max() <= 255, f"{rgb_image.min()}, {rgb_image.max()}"
+            
             img_filename = f'{name}_slice_{z:03d}.png'
             img_path = img_output_path / img_filename
 
@@ -217,13 +241,9 @@ def process_case(id, annos, filelist, output_path, split):
 
             with open(label_path, 'w') as f:
                 f.write('\n'.join(labels))
-            # 调整对比度并保存
-            slice_img = resampled_image[..., z]
-
-            assert slice_img.shape == (512, 512) and slice_img.dtype == np.uint8, f"{slice_img.shape}, {slice_img.dtype}"
-            assert slice_img.min() >= 0 and slice_img.max() <= 255, f"{slice_img.min()}, {slice_img.max()}"
-
-            Image.fromarray(slice_img).save(str(img_path))
+            
+            # 保存RGB图像
+            Image.fromarray(rgb_image, mode='RGB').save(str(img_path))
 
         print(f"Finished processing {split} case: {name}")
 

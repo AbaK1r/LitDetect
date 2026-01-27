@@ -160,6 +160,18 @@ input_size_hw:
 关于配置文件构造和重载，详见 [Hydra](https://hydra.cc/docs/intro/)
 
 ---
+### 模型导出与部署
+#### 导出为ONNX
+```bash
+python scripts/生成ONNX模型.py -v 79 -b 1
+```
+这里```-v```指定验证集的编号，如```-v 79```，表示```lightning_logs/version_79```.
+
+ONNX模型会保存在```lightning_logs/version_79/ckpts```中.
+
+（注意：dino系模型如果使用了deformable detr要启用```-c```以在构建计算图时规避自定义层）
+
+---
 ### 验证模型
 
 ```scripts/```中的脚本在项目根目录下运行：
@@ -173,15 +185,15 @@ python scripts/验证_验证集_TORCH_指标输出.py -v 79
 #### 使用 simple_trt_infer
 将 simple_trt_infer.so 复制到 scripts/ 目录，然后
 ```bash
-python scripts/验证_验证集_TRT_图片输出.py -v 79 -i xxx.engine
+python scripts/验证_验证集_TRT_ONNX_图片指标输出.py -v 79 -d xxx.engine
 ```
 使用加密的 bs 文件
 ```bash
-python scripts/验证_验证集_TRT_图片输出.py -v 79 -i xxx.bs -e
+python scripts/验证_验证集_TRT_ONNX_图片指标输出.py -v 79 -d xxx.bs -e
 ```
 #### 使用 onnxruntime
 ```bash
-python scripts/验证_验证集_ONNX_图片输出.py -v 79 -i xxx.onnx
+python scripts/验证_验证集_TRT_ONNX_图片指标输出.py -v 79 -d xxx.onnx
 ```
 其他参数自己去看文件里的 parser
 ### 进阶

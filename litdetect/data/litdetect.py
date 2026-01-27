@@ -113,6 +113,7 @@ class LitDetectDataset(Dataset):
             'orig_size': (orig_h, orig_w),                              # (2)
             'input_size_hw': self.input_size_hw,                        # (2)
             'image_id': torch.tensor([idx], dtype=torch.int64),    # scalar int
+            'image_name': Path(item['image_path']).name,                # str
         }
 
 
