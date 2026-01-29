@@ -1,4 +1,3 @@
-import logging
 import time
 import warnings
 from collections import defaultdict
@@ -10,14 +9,16 @@ import pandas as pd
 import pytorch_lightning as pl
 import torch
 
+from litdetect.scripts_init import get_logger
 from .ap import plot_froc_curve, plot_mc_curve, plot_pr_curve, smooth
 
+# 初始化日志记录器
+logger = get_logger(__file__)
 # 屏蔽特定警告
 warnings.filterwarnings(
     "ignore",
     message="It is recommended to use `self.log"
 )
-logger = logging.getLogger(__name__)
 
 
 class DetectionMetrics3DCallback(pl.Callback):

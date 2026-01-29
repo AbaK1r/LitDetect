@@ -17,8 +17,6 @@ from litdetect.scripts_init import get_logger, check_path, check_version
 # 初始化日志记录器
 logger = get_logger(__file__)
 
-# 设置CUDA可见设备，这里设置为使用第0和第1张显卡
-# os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
 # 设置浮点数矩阵乘法的精度为高，以优化性能
 torch.set_float32_matmul_precision('high')
 

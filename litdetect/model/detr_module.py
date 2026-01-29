@@ -3,10 +3,10 @@ from typing import Dict, List
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
 from detectron2.checkpoint import DetectionCheckpointer
 from detectron2.config import LazyConfig, instantiate
 from detectron2.structures import Boxes, Instances
-
 from litdetect.model.model_interface import ModuleInterface
 from litdetect.scripts_init import get_logger
 
@@ -128,8 +128,14 @@ class DetrModule(nn.Module):
         if pretrained_weights:
             DetectionCheckpointer(self.model).load(pretrained_weights)
 
-        self.pixel_mean = pixel_mean
-        self.pixel_std = pixel_std
+        if pixel_mean is not None and pixel_mean is not None:
+            pixel_mean = torch.tensor(pixel_mean, dtype=torch.float32).view(1, 3, 1, 1) * 255.
+            pixel_std = torch.tensor(pixel_std, dtype=torch.float32).view(1, 3, 1, 1) * 255.
+            self.register_buffer("pixel_mean", pixel_mean)
+            self.register_buffer("pixel_std", pixel_std)
+        else:
+            self.pixel_mean = None
+            self.pixel_std = None
 
     def forward(self, x):
         return self.dino_forward(x)
@@ -143,12 +149,8 @@ class DetrModule(nn.Module):
         Returns:
 
         """
-        if self.pixel_mean and self.pixel_std:
-            pixel_mean = self.pixel_mean
-            pixel_std = self.pixel_std
-            pixel_mean = torch.tensor(pixel_mean, dtype=x.dtype, device=x.device).view(1, 3, 1, 1) * 255.
-            pixel_std = torch.tensor(pixel_std, dtype=x.dtype, device=x.device).view(1, 3, 1, 1) * 255.
-            x = (x - pixel_mean) / pixel_std
+        if self.pixel_mean is not None and self.pixel_std is not None:
+            x = (x - self.pixel_mean) / self.pixel_std
 
         batch_size, _, H, W = x.shape
         img_masks = x.new_zeros(batch_size, H, W)

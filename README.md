@@ -171,6 +171,29 @@ ONNX模型会保存在```lightning_logs/version_79/ckpts```中.
 
 （注意：dino系模型如果使用了deformable detr要启用```-c```以在构建计算图时规避自定义层）
 
+#### 导出为TensorRT
+先量化
+```bash
+python -m modelopt.onnx.autocast \
+--onnx_path lightning_logs/version_142/ckpts/detr_module-epoch=010-map_50=0.88486_bs_1.onnx \
+--output_path lightning_logs/version_142/ckpts/detr_module-epoch=010-map_50=0.88486_bs_1_sim.onnx \
+--low_precision_type fp16 \
+--op_types_to_exclude LayerNormalization Softmax ScatterElements Gather TopK \
+--keep_io_types \
+--calibration_data /data/16t/wxh/WSI-SDK/patches.npz
+```
+--calibration_data: 指定校准数据路径，为onnx输入的数据，
+键为导出onnx时指定的输入名，值为numpy.ndarray
+（可选）
+
+转换为TensorRT
+```bash
+trtexec \
+--onnx=lightning_logs/version_142/ckpts/detr_module-epoch=010-map_50=0.88486_bs_1_sim.onnx \
+--saveEngine=lightning_logs/version_141/ckpts/test.engine \
+--stronglyTyped --fp16
+```
+
 ---
 ### 验证模型
 

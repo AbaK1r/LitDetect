@@ -1,6 +1,5 @@
 import argparse
 import json
-import os
 from pathlib import Path
 
 import hydra
@@ -17,7 +16,6 @@ from litdetect.scripts_init import get_logger, check_path, check_version
 logger = get_logger(__file__)
 
 # 设置CUDA环境变量和精度
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 torch.set_float32_matmul_precision('high')
 
 
@@ -37,7 +35,7 @@ def parse_args():
     #     'versions': 0,
     #     'input_dir': '/data/16t/lrh/datasets/胎儿超声/小类/训练/脊柱/images/val2017',
     #     'output_dir': '',
-    #     'suffix': 'png',
+    #     'suffix': '.png',
     # }
     return args
 
@@ -78,7 +76,7 @@ def main():
 
     # 推理过程
     with torch.no_grad():
-        pic_paths = list(data_dir.rglob(f'*.{image_suffix}'))
+        pic_paths = list(data_dir.rglob(f'*{image_suffix}'))
         for pic_path in tqdm(pic_paths):
             pic, scale_params = preprocess(pic_path, args.data.input_size_hw[::-1], pixel_mean, pixel_std)
             batch = [{'image': pic}]
